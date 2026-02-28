@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Don't Click</title>
+
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    background: black;
+  }
+
+  .container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    background: black;
+  }
+
+  .tongue {
+    position: absolute;
+    top: 58%;
+    left: 50%;
+    width: 18%;
+    height: 26%;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+  }
+</style>
+</head>
+
+<body>
+
+<audio id="bgm" src="music.mp3"></audio>
+
+<div class="container">
+  <img id="mainImage" src="guy.png" alt="Guy">
+  <div class="tongue" id="tongue"></div>
+</div>
+
+<script>
+  const tongue = document.getElementById("tongue");
+  const image = document.getElementById("mainImage");
+  const audio = document.getElementById("bgm");
+
+  tongue.addEventListener("click", () => {
+    image.src = "yourgif.gif";   // swap to GIF
+    audio.volume = 0.7;
+    audio.loop = true;
+    audio.play();
+    tongue.style.display = "none"; // disable further clicking
+  });
+</script>
+
+</body>
+</html>
