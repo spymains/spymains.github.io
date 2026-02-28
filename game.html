@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>imalloveryou.com :: game</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    canvas { width: 100vw; height: 100vh; display: block; image-rendering: pixelated; }
+
+    /* Choice overlay */
+    #overlay {
+      position: fixed; inset: 0;
+      display: none;
+      align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.78);
+      color: #fff;
+      font-family: monospace;
+    }
+    #panel {
+      width: min(720px, 92vw);
+      border: 2px solid #222;
+      background: rgba(8,8,8,0.95);
+      padding: 18px;
+      box-shadow: 0 0 0 2px #000 inset;
+    }
+    #msg { font-size: 18px; line-height: 1.35; white-space: pre-wrap; }
+    #btns { margin-top: 14px; display: flex; gap: 10px; }
+    button {
+      font-family: monospace;
+      font-size: 16px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid #333;
+      background: #0b0b0b;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover { border-color: #666; }
+    #hint {
+      position: fixed; left: 12px; bottom: 12px;
+      font-family: monospace; font-size: 14px;
+      color: rgba(255,255,255,0.7);
+      user-select: none;
+    }
+    a#back {
+      position: fixed; right: 12px; bottom: 12px;
+      font-family: monospace; font-size: 14px;
+      color: rgba(255,255,255,0.7);
+      text-decoration: none;
+      border: 1px solid rgba(255,255,255,0.18);
+      padding: 8px 10px; border-radius: 10px;
+      background: rgba(0,0,0,0.35);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c" width="320" height="180"></canvas>
+
+  <div id="overlay">
+    <div id="panel">
+      <div id="msg"></div>
+      <div id="btns">
+        <button id="yes">YES</button>
+        <button id="no">NO</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="hint">Move: WASD / Arrow Keys • Enter: interact at door</div>
+  <a id="back" href="index.html">← back</a>
+
+  <script>
+    // ====== Canvas + "pixel" scale ======
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+
+    // ====== Simple room system ======
+    // Tile size in pixels (canvas space)
+    const TS = 16;
+
+    // Player
+    const player = { x: 2 * TS, y: 5 * TS, w: 10, h: 10, speed: 1.35 };
+
+    // Rooms: each has walls and doors (doors can lead to other rooms or "choice events")
+    const rooms = {
+      "start": {
+        name: "START",
+        bg: "#050505",
+        // walls as rectangles
+        walls: [
+          {x:0,y:0,w:20*TS,h:TS}, {x:0,y:0,w:TS,h:11*TS},
+          {x:0,y:10*TS,w:20*TS,h:TS}, {x:19*TS,y:0,w:TS,h:11*TS},
+          // little pillar
+          {x:9*TS,y:4*TS,w:2*TS,h:3*TS}
+        ],
+        // doors: stand near & press Enter
+        doors: [
+          {x:18*TS,y:5*TS,w:TS,h:2*TS, toRoom:"hall", spawn:{x:2*TS,y:5*TS}},
+          {x:1*TS,y:1*TS,w:2*TS,h:TS, event:"choice_1"}
+        ],
+        text: [
+          {x:2*TS,y:9*TS, t:"DON'T THINK TOO HARD."}
+        ]
+      },
+
+      "hall": {
+        name: "HALL",
+        bg: "#040404",
+        walls: [
+          {x:0,y:0,w:20*TS,h:TS}, {x:0,y:0,w:TS,h:11*TS},
+          {x:0,y:10*TS,w:20*TS,h:TS}, {x:19*TS,y:0,w:TS,h:11*TS},
+          // corridor dividers
+          {x:6*TS,y:2*TS,w:TS,h:7*TS},
+          {x:13*TS,y:2*TS,w:TS,h:7*TS},
+        ],
+        doors: [
+          {x:1*TS,y:5*TS,w:TS,h:2*TS, toRoom:"start", spawn:{x:17*TS,y:5*TS}},
+          {x:9*TS,y:1*TS,w:2*TS,h:TS, event:"choice_2"},
+          {x:9*TS,y:9*TS,w:2*TS,h:TS, event:"choice_3"},
+          {x:18*TS,y:5*TS,w:TS,h:2*TS, toRoom:"room3", spawn:{x:2*TS,y:5*TS}},
+        ],
+        text: [
+          {x:2*TS,y:2*TS, t:"EVERY DOOR IS A QUESTION."}
+        ]
+      },
+
+      "room3": {
+        name: "ROOM 3",
+        bg: "#030303",
+        walls: [
+          {x:0,y:0,w:20*TS,h:TS}, {x:0,y:0,w:TS,h:11*TS},
+          {x:0,y:10*TS,w:20*TS,h:TS}, {x:19*TS,y:0,w:TS,h:11*TS},
+          // box in middle
+          {x:8*TS,y:4*TS,w:4*TS,h:3*TS}
+        ],
+        doors: [
+          {x:1*TS,y:5*TS,w:TS,h:2*TS, toRoom:"hall", spawn:{x:17*TS,y:5*TS}},
+          {x:18*TS,y:1*TS,w:TS,h:2*TS, event:"choice_4"}
+        ],
+        text: [
+          {x:2*TS,y:9*TS, t:"YOU CAME HERE ON PURPOSE."}
+        ]
+      }
+    };
+
+    let currentRoomId = "start";
+
+    // ====== Psychological choice events ======
+    const overlay = document.getElementById("overlay");
+    const msgEl = document.getElementById("msg");
+    const yesBtn = document.getElementById("yes");
+    const noBtn = document.getElementById("no");
+
+    const choiceScripts = {
+      choice_1: {
+        steps: [
+          "You found a door.\nDo you want to be seen?",
+          "Are you sure?",
+          "If I said I already knew,\nwould that change your answer?"
+        ],
+        yes: ["Okay.", "Noted.", "Good."],
+        no:  ["Liar.", "Still noted.", "Also good."]
+      },
+      choice_2: {
+        steps: [
+          "Pick one.\nYES or NO.",
+          "Pick again.\nDon't hesitate.",
+          "Last chance.\nChoose like it matters."
+        ],
+        yes: ["Accepted.", "Faster.", "Done."],
+        no:  ["Denied.", "Slower.", "Done."]
+      },
+      choice_3: {
+        steps: [
+          "Do you want to go back?",
+          "Do you want to forget you clicked?",
+          "Do you want to click again anyway?"
+        ],
+        yes: ["Then do it.", "Try.", "Of course you do."],
+        no:  ["You can't.", "You won't.", "You will."]
+      },
+      choice_4: {
+        steps: [
+          "One more question.\nDo you trust the room?",
+          "Do you trust yourself?",
+          "Do you trust me?"
+        ],
+        yes: ["Bad habit.", "Worse habit.", "Perfect."],
+        no:  ["Good.", "Better.", "Also perfect."]
+      }
+    };
+
+    let activeChoice = null;
+    let choiceStep = 0;
+
+    function openChoice(eventId) {
+      activeChoice = choiceScripts[eventId] || choiceScripts.choice_2;
+      choiceStep = 0;
+      overlay.style.display = "flex";
+      msgEl.textContent = activeChoice.steps[choiceStep];
+    }
+
+    function advanceChoice(answer) {
+      // show response line briefly, then next step
+      const response = (answer === "yes")
+        ? activeChoice.yes[Math.min(choiceStep, activeChoice.yes.length - 1)]
+        : activeChoice.no[Math.min(choiceStep, activeChoice.no.length - 1)];
+
+      msgEl.textContent = response;
+
+      setTimeout(() => {
+        choiceStep++;
+        if (choiceStep >= activeChoice.steps.length) {
+          overlay.style.display = "none";
+          activeChoice = null;
+          return;
+        }
+        msgEl.textContent = activeChoice.steps[choiceStep];
+      }, 500);
+    }
+
+    yesBtn.addEventListener("click", () => advanceChoice("yes"));
+    noBtn.addEventListener("click", () => advanceChoice("no"));
+
+    // ====== Input ======
+    const keys = new Set();
+    window.addEventListener("keydown", (e) => {
+      if (overlay.style.display === "flex") return; // lock movement during choices
+      keys.add(e.key.toLowerCase());
+      if (e.key === "Enter") tryInteract();
+    });
+    window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
+
+    function rectsOverlap(a,b){
+      return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+    }
+
+    function move(dx, dy) {
+      const room = rooms[currentRoomId];
+      // move X
+      player.x += dx;
+      for (const w of room.walls) if (rectsOverlap(player, w)) { player.x -= dx; break; }
+      // move Y
+      player.y += dy;
+      for (const w of room.walls) if (rectsOverlap(player, w)) { player.y -= dy; break; }
+
+      // keep inside bounds
+      player.x = Math.max(0, Math.min(player.x, canvas.width - player.w));
+      player.y = Math.max(0, Math.min(player.y, canvas.height - player.h));
+    }
+
+    function tryInteract() {
+      const room = rooms[currentRoomId];
+      const p = {x: player.x-2, y: player.y-2, w: player.w+4, h: player.h+4};
+
+      for (const d of room.doors) {
+        if (rectsOverlap(p, d)) {
+          if (d.toRoom) {
+            currentRoomId = d.toRoom;
+            player.x = d.spawn?.x ?? 2*TS;
+            player.y = d.spawn?.y ?? 5*TS;
+            return;
+          }
+          if (d.event) {
+            openChoice(d.event);
+            return;
+          }
+        }
+      }
+    }
+
+    // ====== Render ======
+    function drawRoom() {
+      const room = rooms[currentRoomId];
+      ctx.fillStyle = room.bg;
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+
+      // walls
+      ctx.fillStyle = "#101010";
+      for (const w of room.walls) ctx.fillRect(w.x,w.y,w.w,w.h);
+
+      // doors (subtle)
+      for (const d of room.doors) {
+        ctx.fillStyle = d.event ? "#151015" : "#101515";
+        ctx.fillRect(d.x,d.y,d.w,d.h);
+      }
+
+      // room text
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      ctx.font = "8px monospace";
+      for (const t of room.text || []) ctx.fillText(t.t, t.x, t.y);
+
+      // player
+      ctx.fillStyle = "#f2f2f2";
+      ctx.fillRect(player.x, player.y, player.w, player.h);
+
+      // darkness vignette (dark room feel)
+      const g = ctx.createRadialGradient(
+        player.x + player.w/2, player.y + player.h/2, 10,
+        player.x + player.w/2, player.y + player.h/2, 120
+      );
+      g.addColorStop(0, "rgba(0,0,0,0)");
+      g.addColorStop(1, "rgba(0,0,0,0.92)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+
+      // room label tiny
+      ctx.fillStyle = "rgba(255,255,255,0.25)";
+      ctx.fillText(room.name, 8, 12);
+    }
+
+    function tick() {
+      if (overlay.style.display !== "flex") {
+        let dx = 0, dy = 0;
+        if (keys.has("a") || keys.has("arrowleft")) dx -= player.speed;
+        if (keys.has("d") || keys.has("arrowright")) dx += player.speed;
+        if (keys.has("w") || keys.has("arrowup")) dy -= player.speed;
+        if (keys.has("s") || keys.has("arrowdown")) dy += player.speed;
+        move(dx, dy);
+      }
+
+      drawRoom();
+      requestAnimationFrame(tick);
+    }
+    tick();
+  </script>
+</body>
+</html>
