@@ -9,47 +9,31 @@
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
   canvas { width: 100vw; height: 100vh; display: block; image-rendering: pixelated; }
 
-  /* Overlay (choices + messages + code input) */
   #overlay {
     position: fixed; inset: 0;
-    display: none;
-    align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.85);
-    color: #fff;
-    font-family: monospace;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.82);
+    color: #fff; font-family: monospace;
   }
   #panel {
-    width: min(680px, 92vw);
+    width: min(720px, 92vw);
     border: 2px solid #222;
-    background: #0a0a0a;
+    background: rgba(8,8,8,0.95);
     padding: 18px;
   }
   #msg { white-space: pre-wrap; font-size: 16px; line-height: 1.35; }
-
   #btnRow { margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
   button {
     font-family: monospace;
-    padding: 8px 14px;
-    background: #000;
-    color: #fff;
-    border: 1px solid #444;
-    cursor: pointer;
-    border-radius: 10px;
-  }
-  button:hover { border-color: #fff; }
-
-  #codeRow { display: none; margin-top: 12px; gap: 10px; align-items: center; flex-wrap: wrap; }
-  input {
-    font-family: monospace;
     font-size: 16px;
-    padding: 8px 10px;
+    padding: 10px 14px;
     border-radius: 10px;
-    border: 1px solid #444;
-    background: #000;
+    border: 1px solid #333;
+    background: #0b0b0b;
     color: #fff;
-    outline: none;
-    width: min(320px, 80vw);
+    cursor: pointer;
   }
+  button:hover { border-color: #666; }
 
   #hint {
     position: fixed; left: 12px; bottom: 12px;
@@ -75,89 +59,47 @@
 <div id="overlay">
   <div id="panel">
     <div id="msg"></div>
-
     <div id="btnRow">
-      <button id="yesBtn">YES</button>
-      <button id="noBtn">NO</button>
       <button id="okBtn">OK</button>
       <button id="closeBtn">CLOSE</button>
-    </div>
-
-    <div id="codeRow">
-      <input id="codeInput" placeholder="enter code..." autocomplete="off" />
-      <button id="submitCodeBtn">SUBMIT</button>
     </div>
   </div>
 </div>
 
-<div id="hint">Move: WASD / Arrows • Enter: interact • In boss: WASD/Arrows to dodge</div>
+<div id="hint">Move: WASD / Arrows • Enter: interact</div>
 <a id="back" href="index.html">← back</a>
 
 <script>
 /* =========================
-   Core setup
+   Setup
 ========================= */
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
 const overlay = document.getElementById("overlay");
 const msgEl = document.getElementById("msg");
-const yesBtn = document.getElementById("yesBtn");
-const noBtn = document.getElementById("noBtn");
 const okBtn = document.getElementById("okBtn");
 const closeBtn = document.getElementById("closeBtn");
 
-const codeRow = document.getElementById("codeRow");
-const codeInput = document.getElementById("codeInput");
-const submitCodeBtn = document.getElementById("submitCodeBtn");
-
-function hideAllOverlayButtons() {
-  yesBtn.style.display = "none";
-  noBtn.style.display = "none";
-  okBtn.style.display = "none";
-  closeBtn.style.display = "none";
-  codeRow.style.display = "none";
-}
-
-function showOverlayMessage(text, { buttons = ["OK"] } = {}) {
+function showMsg(text, { ok=true, close=true } = {}) {
   overlay.style.display = "flex";
   msgEl.textContent = text;
-  hideAllOverlayButtons();
-
-  if (buttons.includes("YES")) yesBtn.style.display = "inline-block";
-  if (buttons.includes("NO")) noBtn.style.display = "inline-block";
-  if (buttons.includes("OK")) okBtn.style.display = "inline-block";
-  if (buttons.includes("CLOSE")) closeBtn.style.display = "inline-block";
+  okBtn.style.display = ok ? "inline-block" : "none";
+  closeBtn.style.display = close ? "inline-block" : "none";
 }
-
-function showOverlayCodePrompt(text) {
-  overlay.style.display = "flex";
-  msgEl.textContent = text;
-  hideAllOverlayButtons();
-  codeRow.style.display = "flex";
-  closeBtn.style.display = "inline-block";
-  codeInput.value = "";
-  codeInput.focus();
-}
-
-/* =========================
-   Assets
-========================= */
-const playerSprite = new Image();
-playerSprite.src = "player.png";
+okBtn.onclick = () => overlay.style.display = "none";
+closeBtn.onclick = () => overlay.style.display = "none";
 
 /* =========================
    Input
 ========================= */
 const keys = new Set();
 window.addEventListener("keydown", (e) => {
-  const k = e.key.toLowerCase();
-  // If overlay is open, let typing happen but block game movement
   if (overlay.style.display === "flex") {
     if (e.key === "Escape") overlay.style.display = "none";
     return;
   }
-  keys.add(k);
+  keys.add(e.key.toLowerCase());
   if (e.key === "Enter") tryInteract();
 });
 window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
@@ -172,90 +114,122 @@ function rectsOverlap(a, b) {
          a.y + a.h > b.y;
 }
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+function rand(min, max) { return Math.random() * (max - min) + min; }
 
 /* =========================
-   Overworld (Rooms)
+   Game State
 ========================= */
 const TS = 16;
+const player = { x: 32, y: 130, w: 12, h: 14, speed: 1.35 };
 
-const player = { x: 32, y: 80, w: 16, h: 16, speed: 1.5 };
+const SECRET_CODE = "larp";
+let hasCode = (localStorage.getItem("hasCode") === "yes");
 
-const SECRET_CODE = "IMALLOVEYOU"; // you can change this
-let foundCode = localStorage.getItem("foundCode") === "yes";
-
+/* =========================
+   Rooms
+========================= */
 const rooms = {
-  start: {
-    name: "START",
+  void: {
+    name: "THE VOID",
     bg: "#050505",
     walls: [
       {x:0,y:0,w:320,h:16},{x:0,y:0,w:16,h:180},
       {x:0,y:164,w:320,h:16},{x:304,y:0,w:16,h:180},
-      {x:9*TS,y:4*TS,w:2*TS,h:3*TS}
+      // a couple of blocks for shape
+      {x:7*TS,y:6*TS,w:2*TS,h:2*TS},
+      {x:12*TS,y:4*TS,w:1*TS,h:4*TS},
     ],
     doors: [
-      // to hall
-      {x:288,y:64,w:16,h:32,toRoom:"hall",spawn:{x:32,y:64}},
-      // psychological choice
-      {x:16,y:16,w:32,h:16,event:"choice_start"}
+      // exit to hall of eyes
+      {x:288,y:80,w:16,h:32,toRoom:"hall_eyes",spawn:{x:32,y:140}}
     ],
     text: [
-      {x:24,y:156,t:"ENTER = INTERACT"}
+      {x:24,y:36,t:"YOU CLICKED."},
+      {x:24,y:52,t:"SO THE ROOM OPENED."},
+      {x:24,y:156,t:"THE DOOR IS RIGHT."}
     ]
   },
 
-  hall: {
-    name: "HALL",
-    bg: "#040404",
-    walls: [
-      {x:0,y:0,w:320,h:16},{x:0,y:0,w:16,h:180},
-      {x:0,y:164,w:320,h:16},{x:304,y:0,w:16,h:180},
-      {x:6*TS,y:2*TS,w:TS,h:7*TS},
-      {x:13*TS,y:2*TS,w:TS,h:7*TS}
-    ],
-    doors: [
-      {x:16,y:64,w:16,h:32,toRoom:"start",spawn:{x:256,y:64}},
-      // NEW: to code room
-      {x:288,y:32,w:16,h:32,toRoom:"code_room",spawn:{x:32,y:96}},
-      // psychological choice door
-      {x:144,y:16,w:32,h:16,event:"choice_hall"},
-      // locked boss door (requires code)
-      {x:288,y:112,w:16,h:32,event:"boss_lock"}
-    ],
-    text: [
-      {x:24,y:28,t:"A DOOR UP. A DOOR DOWN."},
-      {x:24,y:44,t:"ONE OF THEM WANTS A CODE."}
-    ]
-  },
-
-  code_room: {
-    name: "CODE ROOM",
+  hall_eyes: {
+    name: "HALL OF EYES",
     bg: "#030303",
     walls: [
       {x:0,y:0,w:320,h:16},{x:0,y:0,w:16,h:180},
       {x:0,y:164,w:320,h:16},{x:304,y:0,w:16,h:180},
-      {x:8*TS,y:4*TS,w:4*TS,h:3*TS}
+      // narrow corridor feel (two inner walls)
+      {x:4*TS,y:2*TS,w:TS,h:8*TS},
+      {x:15*TS,y:2*TS,w:TS,h:8*TS},
     ],
     doors: [
-      {x:16,y:96,w:16,h:32,toRoom:"hall",spawn:{x:256,y:32}},
-      // SECRET CODE door (the “find it” door)
-      {x:288,y:64,w:16,h:32,event:"reveal_code"},
-      // Another psychological door just for spice
-      {x:16,y:16,w:32,h:16,event:"choice_code"}
+      {x:16,y:80,w:16,h:32,toRoom:"void",spawn:{x:272,y:80}},
+      // at the top: to code room (NPC)
+      {x:144,y:16,w:32,h:16,toRoom:"code_room",spawn:{x:144,y:132}},
+      // optional creepy whisper plaque (interaction)
+      {x:144,y:148,w:32,h:16,event:"whisper"}
     ],
     text: [
-      {x:24,y:156,t:"SOMEONE LEFT A NOTE IN A DOOR."}
+      {x:24,y:40,t:"DON'T LOOK LEFT."},
+      {x:24,y:56,t:"DON'T LOOK RIGHT."},
+      {x:24,y:72,t:"WALK UP."}
+    ]
+  },
+
+  code_room: {
+    name: "THE ONE WHO KNOWS",
+    bg: "#060606",
+    walls: [
+      {x:0,y:0,w:320,h:16},{x:0,y:0,w:16,h:180},
+      {x:0,y:164,w:320,h:16},{x:304,y:0,w:16,h:180},
+      // table-ish block
+      {x:9*TS,y:6*TS,w:2*TS,h:1*TS},
+      {x:8*TS,y:7*TS,w:4*TS,h:1*TS},
+    ],
+    doors: [
+      {x:144,y:164-16,w:32,h:16,toRoom:"hall_eyes",spawn:{x:144,y:32}}
+    ],
+    npc: { x: 156, y: 76, w: 12, h: 16 },
+    text: [
+      {x:24,y:40,t:"SOMEONE IS IN HERE."},
+      {x:24,y:56,t:"THEY'RE PRETENDING YOU'RE NOT."}
     ]
   }
 };
 
-let currentRoom = "start";
+let currentRoom = "void";
 
-function moveOverworld(dx, dy) {
+/* =========================
+   Events / Dialogue
+========================= */
+function triggerEvent(id) {
+  if (id === "whisper") {
+    if (!hasCode) {
+      showMsg("A plaque under the eyes:\n\n\"THE WORD IS SMALL.\nFOUR LETTERS.\nPLAYING PRETEND.\"\n\n(keep going up.)");
+    } else {
+      showMsg("The plaque is blank now.\n\nIt already got what it wanted.");
+    }
+  }
+}
+
+function talkToNpc() {
+  if (!hasCode) {
+    hasCode = true;
+    localStorage.setItem("hasCode", "yes");
+    showMsg(
+      "The figure speaks without moving:\n\n\"You want the word?\"\n\n\"Fine.\"\n\nCODE: larp\n\n\"Don't say it like you mean it.\""
+    );
+  } else {
+    showMsg("They tilt their head.\n\n\"You already have it.\"\n\n\"Go.\"");
+  }
+}
+
+/* =========================
+   Movement / Interaction
+========================= */
+function move(dx, dy) {
   const room = rooms[currentRoom];
-  // move X
   player.x += dx;
   for (const w of room.walls) if (rectsOverlap(player, w)) { player.x -= dx; break; }
-  // move Y
+
   player.y += dy;
   for (const w of room.walls) if (rectsOverlap(player, w)) { player.y -= dy; break; }
 
@@ -264,22 +238,27 @@ function moveOverworld(dx, dy) {
 }
 
 function tryInteract() {
-  if (mode !== "overworld") return;
   const room = rooms[currentRoom];
+  const pad = { x: player.x-2, y: player.y-2, w: player.w+4, h: player.h+4 };
 
-  // small interaction padding
-  const p = { x: player.x-2, y: player.y-2, w: player.w+4, h: player.h+4 };
+  // NPC talk in code room
+  if (currentRoom === "code_room" && room.npc) {
+    if (rectsOverlap(pad, room.npc)) {
+      talkToNpc();
+      return;
+    }
+  }
 
-  for (const d of room.doors) {
-    if (!rectsOverlap(p, d)) continue;
+  // Doors
+  for (const d of room.doors || []) {
+    if (!rectsOverlap(pad, d)) continue;
 
     if (d.toRoom) {
       currentRoom = d.toRoom;
       player.x = d.spawn?.x ?? 32;
-      player.y = d.spawn?.y ?? 80;
+      player.y = d.spawn?.y ?? 130;
       return;
     }
-
     if (d.event) {
       triggerEvent(d.event);
       return;
@@ -288,360 +267,198 @@ function tryInteract() {
 }
 
 /* =========================
-   Psychological / Events
+   Visuals
 ========================= */
-const choiceScripts = {
-  choice_start: {
-    steps: [
-      "You clicked somewhere else.\nSo now you're here.\n\nDo you want to be seen?",
-      "Do you want to be understood?",
-      "Do you want to be followed?"
-    ],
-    yes: ["Good.", "Interesting.", "Perfect."],
-    no:  ["Liar.", "Also interesting.", "Still perfect."]
-  },
-  choice_hall: {
-    steps: [
-      "Every hallway is a decision.\n\nDo you choose fast or careful?",
-      "Do you want a warning before it happens?",
-      "Would you listen if I gave one?"
-    ],
-    yes: ["Sure.", "Okay.", "You won't."],
-    no:  ["Then don't.", "Fine.", "You still won't."]
-  },
-  choice_code: {
-    steps: [
-      "This room is quieter.\n\nDo you feel safer?",
-      "Do you think safety is real?",
-      "Do you want the truth?"
-    ],
-    yes: ["No.", "No.", "No."],
-    no:  ["Good.", "Better.", "Best."]
-  }
-};
 
-let activeChoice = null;
-let choiceStep = 0;
+// Draw a "legally distinct strongest sorcerer" pixel character
+// White hair + blindfold + dark outfit
+function drawPlayer(px, py) {
+  const x = Math.floor(px);
+  const y = Math.floor(py);
 
-function openChoice(id) {
-  activeChoice = choiceScripts[id] || choiceScripts.choice_hall;
-  choiceStep = 0;
-  showOverlayMessage(activeChoice.steps[choiceStep], { buttons: ["YES","NO"] });
+  // shadow
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(x+2, y+12, 8, 2);
+
+  // coat/body
+  ctx.fillStyle = "#0c0c0c";
+  ctx.fillRect(x+3, y+6, 6, 8);
+
+  // neck/face base
+  ctx.fillStyle = "#d8d8d8";
+  ctx.fillRect(x+4, y+3, 4, 3);
+
+  // blindfold
+  ctx.fillStyle = "#111";
+  ctx.fillRect(x+4, y+4, 4, 1);
+
+  // hair (white)
+  ctx.fillStyle = "#f0f0f0";
+  ctx.fillRect(x+3, y+2, 6, 2);
+  ctx.fillRect(x+4, y+1, 4, 1);
+
+  // little collar highlight
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(x+4, y+6, 4, 1);
+
+  // tiny aura pixel (subtle)
+  ctx.fillStyle = "rgba(120,180,255,0.35)";
+  ctx.fillRect(x+2, y+5, 1, 1);
+  ctx.fillRect(x+9, y+5, 1, 1);
 }
 
-function advanceChoice(answer) {
-  const response = (answer === "yes")
-    ? activeChoice.yes[Math.min(choiceStep, activeChoice.yes.length - 1)]
-    : activeChoice.no[Math.min(choiceStep, activeChoice.no.length - 1)];
+// Creepy eye field for the hall
+const eyeDots = [];
+function initEyes() {
+  eyeDots.length = 0;
+  // Fill left and right “walls” with eyes
+  for (let i = 0; i < 75; i++) {
+    const side = Math.random() < 0.5 ? "L" : "R";
+    const x = side === "L" ? rand(18, 56) : rand(264, 302);
+    const y = rand(18, 160);
+    const r = rand(1.5, 3);
+    const blink = rand(0, 200);
+    eyeDots.push({ x, y, r, blink, side });
+  }
+}
+initEyes();
 
-  showOverlayMessage(response, { buttons: [] });
+function drawEyes() {
+  // subtle movement: pupils track player a bit
+  const px = player.x + player.w/2;
+  const py = player.y + player.h/2;
 
-  setTimeout(() => {
-    choiceStep++;
-    if (choiceStep >= activeChoice.steps.length) {
-      overlay.style.display = "none";
-      activeChoice = null;
-      return;
+  for (const e of eyeDots) {
+    e.blink += 1;
+
+    // blink occasionally
+    const blinking = (Math.sin(e.blink / 18) > 0.985);
+
+    // sclera glow
+    ctx.fillStyle = "rgba(255,255,255,0.10)";
+    ctx.fillRect(e.x - e.r*2, e.y - e.r, e.r*4, e.r*2);
+
+    if (blinking) {
+      // closed eye line
+      ctx.fillStyle = "rgba(255,255,255,0.22)";
+      ctx.fillRect(e.x - e.r*2, e.y, e.r*4, 1);
+      continue;
     }
-    showOverlayMessage(activeChoice.steps[choiceStep], { buttons: ["YES","NO"] });
-  }, 450);
+
+    // eye outline
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.fillRect(e.x - e.r*2, e.y - e.r, e.r*4, 1);
+    ctx.fillRect(e.x - e.r*2, e.y + e.r, e.r*4, 1);
+
+    // pupil tracking
+    const dx = clamp((px - e.x) / 60, -1, 1);
+    const dy = clamp((py - e.y) / 60, -1, 1);
+
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillRect(e.x + dx*2 - 1, e.y + dy*2 - 1, 2, 2);
+
+    // tiny specular dot
+    ctx.fillStyle = "rgba(255,255,255,0.22)";
+    ctx.fillRect(e.x + dx*2, e.y + dy*2, 1, 1);
+  }
+
+  // a faint “watching” haze
+  ctx.fillStyle = "rgba(255,255,255,0.03)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
-yesBtn.onclick = () => { if (activeChoice) advanceChoice("yes"); };
-noBtn.onclick  = () => { if (activeChoice) advanceChoice("no"); };
-okBtn.onclick  = () => { overlay.style.display = "none"; };
-closeBtn.onclick = () => { overlay.style.display = "none"; };
+// NPC sprite (quiet person)
+function drawNpc(n) {
+  const x = Math.floor(n.x);
+  const y = Math.floor(n.y);
 
-function triggerEvent(id) {
-  if (id === "reveal_code") {
-    foundCode = true;
-    localStorage.setItem("foundCode", "yes");
-    showOverlayMessage(
-      "The door is warm.\nA folded note slides out.\n\nSECRET CODE:\n" + SECRET_CODE + "\n\n(remember it.)",
-      { buttons: ["OK"] }
-    );
-    return;
-  }
+  // shadow
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(x+2, y+14, 8, 2);
 
-  if (id === "boss_lock") {
-    if (!foundCode) {
-      showOverlayMessage(
-        "The lock has no keyhole.\nJust a tiny message:\n\n\"YOU DIDN'T EARN THE WORD.\"",
-        { buttons: ["OK"] }
-      );
-      return;
-    }
-    showOverlayCodePrompt("A voice in the door:\n\n\"Say the word.\"\n\n(Type the secret code)");
-    return;
-  }
-
-  // psychological choices
-  if (id.startsWith("choice_")) {
-    openChoice(id);
-    return;
-  }
-
-  // aliasing
-  if (id === "choice_start") return openChoice("choice_start");
-  if (id === "choice_hall") return openChoice("choice_hall");
-  if (id === "choice_code") return openChoice("choice_code");
-}
-
-submitCodeBtn.onclick = () => {
-  const typed = (codeInput.value || "").trim().toUpperCase();
-  if (typed === SECRET_CODE.toUpperCase()) {
-    overlay.style.display = "none";
-    startBossFight();
-  } else {
-    showOverlayMessage("Wrong.\n\nThe door does not like guessing.", { buttons: ["OK"] });
-  }
-};
-
-/* =========================
-   Boss fight (Undertale-ish)
-   Mode switch: overworld -> boss
-========================= */
-let mode = "overworld";
-
-// soul (heart) in box
-const soul = { x: 0, y: 0, w: 6, h: 6, speed: 1.8, hp: 6 };
-let bossTimer = 0;
-let bullets = [];
-let bossState = "idle";
-let invuln = 0;
-
-// Arena box (in canvas coords)
-const arena = { x: 80, y: 56, w: 160, h: 96 };
-
-function startBossFight() {
-  mode = "boss";
-  bossTimer = 0;
-  bullets = [];
-  soul.hp = 6;
-  invuln = 0;
-  bossState = "phase1";
-  // center soul
-  soul.x = arena.x + arena.w/2 - soul.w/2;
-  soul.y = arena.y + arena.h/2 - soul.h/2;
-}
-
-function endBossFight(win) {
-  mode = "overworld";
-  bullets = [];
-  bossState = "idle";
-  invuln = 0;
-
-  // Return player to hall, near the lock door
-  currentRoom = "hall";
-  player.x = 240;
-  player.y = 112;
-
-  if (win) {
-    showOverlayMessage("...\n\nYou lived.\nThe hallway pretends it never happened.", { buttons: ["OK"] });
-  } else {
-    showOverlayMessage("You lost.\n\nThe door smiles anyway.", { buttons: ["OK"] });
-  }
-}
-
-function spawnBullet(pattern) {
-  // bullets are small squares
-  // {x,y,vx,vy,size}
-  if (pattern === "rain") {
-    const x = arena.x + 4 + Math.random() * (arena.w - 8);
-    bullets.push({ x, y: arena.y + 2, vx: 0, vy: 1.6, s: 4 });
-  }
-  if (pattern === "side") {
-    const y = arena.y + 6 + Math.random() * (arena.h - 12);
-    const fromLeft = Math.random() < 0.5;
-    bullets.push({ x: fromLeft ? arena.x + 2 : arena.x + arena.w - 6, y, vx: fromLeft ? 1.7 : -1.7, vy: 0, s: 4 });
-  }
-  if (pattern === "cross") {
-    const edge = Math.floor(Math.random() * 4);
-    let x, y, vx, vy;
-    const sp = 1.5;
-    if (edge === 0) { x = arena.x + Math.random()*arena.w; y = arena.y + 2; vx = (Math.random()-0.5)*0.6; vy = sp; }
-    if (edge === 1) { x = arena.x + arena.w - 6; y = arena.y + Math.random()*arena.h; vx = -sp; vy = (Math.random()-0.5)*0.6; }
-    if (edge === 2) { x = arena.x + Math.random()*arena.w; y = arena.y + arena.h - 6; vx = (Math.random()-0.5)*0.6; vy = -sp; }
-    if (edge === 3) { x = arena.x + 2; y = arena.y + Math.random()*arena.h; vx = sp; vy = (Math.random()-0.5)*0.6; }
-    bullets.push({ x, y, vx, vy, s: 4 });
-  }
-}
-
-function updateBoss() {
-  // movement
-  let dx = 0, dy = 0;
-  if (keys.has("a") || keys.has("arrowleft")) dx -= soul.speed;
-  if (keys.has("d") || keys.has("arrowright")) dx += soul.speed;
-  if (keys.has("w") || keys.has("arrowup")) dy -= soul.speed;
-  if (keys.has("s") || keys.has("arrowdown")) dy += soul.speed;
-
-  soul.x = clamp(soul.x + dx, arena.x, arena.x + arena.w - soul.w);
-  soul.y = clamp(soul.y + dy, arena.y, arena.y + arena.h - soul.h);
-
-  bossTimer++;
-
-  // patterns by time
-  if (bossState === "phase1") {
-    if (bossTimer % 12 === 0) spawnBullet("rain");
-    if (bossTimer % 30 === 0) spawnBullet("side");
-    if (bossTimer > 60 * 10) bossState = "phase2"; // after ~10s
-  } else if (bossState === "phase2") {
-    if (bossTimer % 10 === 0) spawnBullet("cross");
-    if (bossTimer % 28 === 0) spawnBullet("side");
-    if (bossTimer > 60 * 20) {
-      // survive ~20s total → win
-      endBossFight(true);
-      return;
-    }
-  }
-
-  // update bullets
-  for (const b of bullets) {
-    b.x += b.vx;
-    b.y += b.vy;
-  }
-  bullets = bullets.filter(b =>
-    b.x > arena.x - 40 && b.x < arena.x + arena.w + 40 &&
-    b.y > arena.y - 40 && b.y < arena.y + arena.h + 40
-  );
-
-  // collision
-  if (invuln > 0) invuln--;
-  const sRect = { x: soul.x, y: soul.y, w: soul.w, h: soul.h };
-
-  if (invuln === 0) {
-    for (const b of bullets) {
-      const bRect = { x: b.x, y: b.y, w: b.s, h: b.s };
-      if (rectsOverlap(sRect, bRect)) {
-        soul.hp--;
-        invuln = 30; // ~0.5s
-        if (soul.hp <= 0) {
-          endBossFight(false);
-          return;
-        }
-        break;
-      }
-    }
-  }
-}
-
-function drawBoss() {
-  // background
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  // boss text
-  ctx.fillStyle = "rgba(255,255,255,0.8)";
-  ctx.font = "10px monospace";
-  ctx.fillText("???", 12, 18);
-  ctx.fillStyle = "rgba(255,255,255,0.5)";
-  ctx.fillText("the door is tired of questions.", 12, 32);
-
-  // arena border
+  // body
   ctx.fillStyle = "#0b0b0b";
-  ctx.fillRect(arena.x, arena.y, arena.w, arena.h);
-  ctx.strokeStyle = "rgba(255,255,255,0.55)";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(arena.x + 0.5, arena.y + 0.5, arena.w - 1, arena.h - 1);
+  ctx.fillRect(x+3, y+6, 6, 8);
 
-  // bullets
-  ctx.fillStyle = "rgba(255,255,255,0.85)";
-  for (const b of bullets) ctx.fillRect(Math.floor(b.x), Math.floor(b.y), b.s, b.s);
+  // head
+  ctx.fillStyle = "#cfcfcf";
+  ctx.fillRect(x+4, y+3, 4, 3);
 
-  // soul (simple heart-ish pixel)
-  // draw a tiny heart using rectangles (undertale vibe)
-  const hx = Math.floor(soul.x), hy = Math.floor(soul.y);
-  ctx.fillStyle = invuln > 0 ? "rgba(255,80,80,0.85)" : "rgba(255,80,80,1)";
-  // heart pixels (approx)
-  ctx.fillRect(hx+2, hy+0, 2, 1);
-  ctx.fillRect(hx+0, hy+1, 1, 2);
-  ctx.fillRect(hx+5, hy+1, 1, 2);
-  ctx.fillRect(hx+1, hy+1, 4, 4);
-  ctx.fillRect(hx+2, hy+5, 2, 1);
+  // hair
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(x+3, y+2, 6, 2);
 
-  // HP bar
-  ctx.fillStyle = "rgba(255,255,255,0.7)";
-  ctx.fillText("HP", 12, 164);
-  ctx.fillStyle = "rgba(255,80,80,0.95)";
-  ctx.fillRect(36, 156, soul.hp * 18, 8);
-  ctx.strokeStyle = "rgba(255,255,255,0.25)";
-  ctx.strokeRect(36.5, 156.5, 6 * 18, 8);
+  // eyes (tiny, unsettling)
+  ctx.fillStyle = "rgba(255,255,255,0.35)";
+  ctx.fillRect(x+5, y+4, 1, 1);
+  ctx.fillRect(x+7, y+4, 1, 1);
 }
 
 /* =========================
-   Render overworld
+   Render
 ========================= */
-function drawOverworld() {
+function drawRoom() {
   const room = rooms[currentRoom];
+
+  // background
   ctx.fillStyle = room.bg;
-  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // walls
   ctx.fillStyle = "#101010";
-  for (const w of room.walls) ctx.fillRect(w.x,w.y,w.w,w.h);
+  for (const w of room.walls) ctx.fillRect(w.x, w.y, w.w, w.h);
 
-  // doors (subtle colors)
-  for (const d of room.doors) {
+  // doors
+  for (const d of (room.doors || [])) {
     ctx.fillStyle = d.event ? "#151015" : "#101515";
-    ctx.fillRect(d.x,d.y,d.w,d.h);
+    ctx.fillRect(d.x, d.y, d.w, d.h);
   }
+
+  // special visuals for hall of eyes
+  if (currentRoom === "hall_eyes") {
+    drawEyes();
+  }
+
+  // npc
+  if (currentRoom === "code_room" && room.npc) drawNpc(room.npc);
+
+  // player
+  drawPlayer(player.x, player.y);
 
   // text
   ctx.fillStyle = "rgba(255,255,255,0.55)";
   ctx.font = "8px monospace";
   for (const t of (room.text || [])) ctx.fillText(t.t, t.x, t.y);
 
-  // player sprite
-  if (playerSprite.complete && playerSprite.naturalWidth > 0) {
-    ctx.drawImage(playerSprite, Math.floor(player.x), Math.floor(player.y), 16, 16);
-  } else {
-    ctx.fillStyle = "#f2f2f2";
-    ctx.fillRect(player.x, player.y, 16, 16);
-  }
-
-  // vignette darkness
-  const g = ctx.createRadialGradient(
-    player.x + player.w/2, player.y + player.h/2, 10,
-    player.x + player.w/2, player.y + player.h/2, 120
-  );
-  g.addColorStop(0, "rgba(0,0,0,0)");
-  g.addColorStop(1, "rgba(0,0,0,0.92)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  // room label
-  ctx.fillStyle = "rgba(255,255,255,0.2)";
+  // room label + code status
+  ctx.fillStyle = "rgba(255,255,255,0.18)";
   ctx.fillText(room.name, 8, 12);
+  if (hasCode) ctx.fillText("code: larp", 8, 24);
 
-  // subtle hint if code found
-  if (foundCode) {
-    ctx.fillStyle = "rgba(255,255,255,0.16)";
-    ctx.fillText("code remembered.", 8, 24);
-  }
+  // vignette darkness for atmosphere
+  const cx = player.x + player.w/2;
+  const cy = player.y + player.h/2;
+  const g = ctx.createRadialGradient(cx, cy, 12, cx, cy, 120);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.90)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
 /* =========================
-   Main Loop
+   Loop
 ========================= */
 function tick() {
-  // update
   if (overlay.style.display !== "flex") {
-    if (mode === "overworld") {
-      let dx = 0, dy = 0;
-      if (keys.has("a") || keys.has("arrowleft")) dx -= player.speed;
-      if (keys.has("d") || keys.has("arrowright")) dx += player.speed;
-      if (keys.has("w") || keys.has("arrowup")) dy -= player.speed;
-      if (keys.has("s") || keys.has("arrowdown")) dy += player.speed;
-      moveOverworld(dx, dy);
-    } else if (mode === "boss") {
-      updateBoss();
-    }
+    let dx = 0, dy = 0;
+    if (keys.has("a") || keys.has("arrowleft")) dx -= player.speed;
+    if (keys.has("d") || keys.has("arrowright")) dx += player.speed;
+    if (keys.has("w") || keys.has("arrowup")) dy -= player.speed;
+    if (keys.has("s") || keys.has("arrowdown")) dy += player.speed;
+    move(dx, dy);
   }
 
-  // draw
-  if (mode === "overworld") drawOverworld();
-  else drawBoss();
-
+  drawRoom();
   requestAnimationFrame(tick);
 }
 tick();
