@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Don't Click</title>
+<title>imalloveryou.com</title>
 
 <style>
   html, body {
@@ -28,9 +28,10 @@
     background: black;
   }
 
+  /* Invisible tongue hitbox */
   .tongue {
     position: absolute;
-    top: 58%;
+    top: 58%;        /* adjust if needed */
     left: 50%;
     width: 18%;
     height: 26%;
@@ -45,7 +46,7 @@
 <audio id="bgm" src="music.mp3"></audio>
 
 <div class="container">
-  <img id="mainImage" src="guy.png" alt="Guy">
+  <img id="mainImage" src="guy.png" alt="Image">
   <div class="tongue" id="tongue"></div>
 </div>
 
@@ -54,12 +55,19 @@
   const image = document.getElementById("mainImage");
   const audio = document.getElementById("bgm");
 
-  tongue.addEventListener("click", () => {
-    image.src = "yourgif.gif";   // swap to GIF
+  // Tongue click → GIF + music
+  tongue.addEventListener("click", function(e) {
+    e.stopPropagation(); // prevents redirect to game
+    image.src = "yourgif.gif";
     audio.volume = 0.7;
     audio.loop = true;
-    audio.play();
-    tongue.style.display = "none"; // disable further clicking
+    audio.play().catch(() => {});
+    tongue.style.display = "none";
+  });
+
+  // Click anywhere else → go to minigame
+  document.addEventListener("click", function() {
+    window.location.href = "game.html";
   });
 </script>
 
