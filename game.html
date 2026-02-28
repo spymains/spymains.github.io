@@ -7,15 +7,16 @@
 <style>
   html, body { margin:0; height:100%; background:#000; overflow:hidden; }
   canvas { width:100vw; height:100vh; display:block; }
-  #help {
+  #help{
     position:fixed; left:12px; bottom:12px;
     font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     color: rgba(255,255,255,0.65);
     user-select:none;
     max-width: 720px;
     line-height: 1.25;
+    z-index: 5;
   }
-  a#back {
+  a#back{
     position: fixed; right: 12px; bottom: 12px;
     font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     color: rgba(255,255,255,0.65);
@@ -23,6 +24,7 @@
     border: 1px solid rgba(255,255,255,0.14);
     padding: 8px 10px; border-radius: 12px;
     background: rgba(0,0,0,0.35);
+    z-index: 5;
   }
 </style>
 </head>
@@ -48,16 +50,15 @@ function resize(){
   canvas.width = Math.floor(W * dpr);
   canvas.height = Math.floor(H * dpr);
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  initEyes(); // regenerate eyes layout for new size
+  initEyes(); // OK now (eyes exists before we call resize at the end)
 }
 window.addEventListener("resize", resize);
-resize();
 
 /* =========================
    Input
 ========================= */
 const keys = new Set();
-let pressed = new Set(); // edge-trigger
+let pressed = new Set();
 window.addEventListener("keydown", (e)=>{
   const k = e.key.toLowerCase();
   if (!keys.has(k)) pressed.add(k);
@@ -70,10 +71,8 @@ window.addEventListener("keyup", (e)=> keys.delete(e.key.toLowerCase()) );
    Helpers
 ========================= */
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const lerp=(a,b,t)=>a+(b-a)*t;
 const rand=(a,b)=>Math.random()*(b-a)+a;
 const chance=(p)=>Math.random()<p;
-const dist=(ax,ay,bx,by)=>Math.hypot(ax-bx, ay-by);
 
 function aabb(a,b){
   return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
@@ -117,17 +116,16 @@ function drawWrapped(text,x,y,maxW,lineH){
    UI panels
 ========================= */
 const ui = {
-  panel: null, // "dialog" | "inventory"
+  panel: null, // dialog | inventory
   dialogText: "",
   invScroll: 0,
-
   closeAll(){ this.panel=null; },
-
   openDialog(text){ this.panel="dialog"; this.dialogText=text; },
   toggleInventory(){ this.panel = (this.panel==="inventory" ? null : "inventory"); },
 
-  draw(){
+  draw(game){
     if (!this.panel) return;
+
     const pad=18;
     const boxW = Math.min(780, W-40);
     const boxH = this.panel==="inventory" ? Math.min(440, H-120) : Math.min(280, H-120);
@@ -172,6 +170,7 @@ const ui = {
       for (let i=0;i<items.length;i++){
         const it = items[i];
         const rowH = 26;
+
         ctx.fillStyle = "rgba(255,255,255,0.08)";
         ctx.fillRect(x+pad, yy, boxW-pad*2, rowH-2);
 
@@ -193,20 +192,19 @@ const ui = {
 };
 
 /* =========================
-   Avatar (actual character image)
-   Put avatar.png in same folder for custom look.
+   Avatar (put avatar.png next to this file)
 ========================= */
 const avatarImg = new Image();
 let avatarReady = false;
 avatarImg.onload = () => { avatarReady = true; };
 avatarImg.onerror = () => { avatarReady = false; };
-avatarImg.src = "avatar.png"; // <-- your file here
+avatarImg.src = "avatar.png";
 
 function drawAvatarOrFallback(pl, camX){
   const x = pl.x - camX;
   const y = pl.y;
 
-  // aura ring (stylized)
+  // aura ring
   ctx.save();
   ctx.shadowColor = "rgba(120,180,255,0.25)";
   ctx.shadowBlur = 26;
@@ -217,46 +215,41 @@ function drawAvatarOrFallback(pl, camX){
   ctx.stroke();
   ctx.restore();
 
-  if (avatarReady) {
-    // draw your PNG. (Assumes transparent background looks best)
+  if (avatarReady){
     ctx.save();
     if (pl.iFrames > 0) ctx.globalAlpha = 0.75;
-    // mirror depending on face
-    if (pl.face < 0) {
+
+    if (pl.face < 0){
       ctx.translate(x + pl.w, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(avatarImg, 0, 0, avatarImg.width, avatarImg.height,
-        0, y, pl.w, pl.h);
+      ctx.drawImage(avatarImg, 0, 0, avatarImg.width, avatarImg.height, 0, y, pl.w, pl.h);
     } else {
-      ctx.drawImage(avatarImg, 0, 0, avatarImg.width, avatarImg.height,
-        x, y, pl.w, pl.h);
+      ctx.drawImage(avatarImg, 0, 0, avatarImg.width, avatarImg.height, x, y, pl.w, pl.h);
     }
     ctx.restore();
     return;
   }
 
-  // fallback “blindfold sorcerer vibe” (non-copyright)
+  // fallback character
   ctx.fillStyle = "rgba(255,255,255,0.12)";
   roundRect(x, y, pl.w, pl.h, 18, true, false);
-
-  ctx.fillStyle = "rgba(0,0,0,0.35)"; // blindfold
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
   ctx.fillRect(x+8, y+22, pl.w-16, 4);
-
-  if (pl.iFrames > 0) {
+  if (pl.iFrames > 0){
     ctx.fillStyle = "rgba(255,255,255,0.06)";
     roundRect(x-4, y-4, pl.w+8, pl.h+8, 20, true, false);
   }
 }
 
 /* =========================
-   Act 1: Hall of Eyes → code → secret door
+   Act 1: Hall of Eyes
 ========================= */
 const SECRET_CODE = "larp";
 let hasCode = false;
 
 const act1 = {
   room: "void",
-  player: { x: 90, y: 0, w: 44, h: 72, vx:0, vy:0, onGround:false, face:1 },
+  player: { x: 90, y: 0, w: 44, h: 72, vx:0, vy:0, onGround:false, face:1, iFrames:0 },
   groundY(){ return H - 160; },
 
   rooms: {
@@ -273,7 +266,7 @@ const act1 = {
       text: [
         {t:"YOU CLICKED.", y:110},
         {t:"SO THE ROOM OPENED.", y:136},
-        {t:"THE DOOR IS RIGHT.", y: H=>H-80}
+        {t:"THE DOOR IS RIGHT.", y: (H)=>H-80}
       ]
     },
 
@@ -316,6 +309,7 @@ const act1 = {
   }
 };
 
+/* ====== Eyes (must exist BEFORE resize runs) ====== */
 const eyes = [];
 function initEyes(){
   eyes.length = 0;
@@ -327,26 +321,18 @@ function initEyes(){
   }
 }
 
-function act1Walls(){
-  return act1.rooms[act1.room].walls(W,H);
-}
-function act1Doors(){
-  return act1.rooms[act1.room].doors(W,H);
-}
-function act1Npc(){
-  const room = act1.rooms[act1.room];
-  return room.npc ? room.npc(W,H) : null;
-}
+function act1Walls(){ return act1.rooms[act1.room].walls(W,H); }
+function act1Doors(){ return act1.rooms[act1.room].doors(W,H); }
+function act1Npc(){ const room = act1.rooms[act1.room]; return room.npc ? room.npc(W,H) : null; }
 
 function act1Move(dt){
   const pl = act1.player;
-  const accel = 2400;
-  const maxSpd = 520;
-  const friction = 2600;
+  const accel = 2400, maxSpd = 520, friction = 2600;
 
   let move = 0;
   if (keys.has("a") || keys.has("arrowleft")) move -= 1;
   if (keys.has("d") || keys.has("arrowright")) move += 1;
+
   if (move !== 0){ pl.face = move; pl.vx += move * accel * dt; }
   else {
     if (pl.vx > 0) pl.vx = Math.max(0, pl.vx - friction*dt);
@@ -354,34 +340,28 @@ function act1Move(dt){
   }
   pl.vx = clamp(pl.vx, -maxSpd, maxSpd);
 
-  // jump
   const wantJump = pressed.has("w") || pressed.has(" ") || pressed.has("arrowup");
   if (wantJump && pl.onGround) pl.vy = -820;
 
-  // gravity
   pl.vy += game.gravity * dt;
 
-  // integrate
   pl.x += pl.vx * dt;
   pl.y += pl.vy * dt;
 
-  // collide with “room walls” (treat as platforms/blocks)
   const walls = act1Walls();
   pl.onGround = false;
 
   for (const w of walls){
-    // basic AABB resolution
     if (!aabb(pl, w)) continue;
 
-    // resolve Y first
     const prevY = pl.y - pl.vy * dt;
     const wasAbove = prevY + pl.h <= w.y + 2;
-    if (wasAbove) {
+
+    if (wasAbove){
       pl.y = w.y - pl.h;
       pl.vy = 0;
       pl.onGround = true;
     } else {
-      // resolve X push
       const mid = (pl.x + pl.w/2) - (w.x + w.w/2);
       if (mid < 0) pl.x = w.x - pl.w;
       else pl.x = w.x + w.w;
@@ -389,9 +369,8 @@ function act1Move(dt){
     }
   }
 
-  // ground floor
   const g = act1.groundY();
-  if (pl.y + pl.h >= g) {
+  if (pl.y + pl.h >= g){
     pl.y = g - pl.h;
     pl.vy = 0;
     pl.onGround = true;
@@ -404,10 +383,9 @@ function act1Interact(){
   const pl = act1.player;
   const pad = { x:pl.x-14, y:pl.y-12, w:pl.w+28, h:pl.h+24 };
 
-  // NPC talk
-  if (act1.room === "code_room") {
+  if (act1.room === "code_room"){
     const npc = act1Npc();
-    if (npc && aabb(pad, npc)) {
+    if (npc && aabb(pad, npc)){
       hasCode = true;
       ui.openDialog(
         "The figure speaks like a narrator.\n\n" +
@@ -419,7 +397,6 @@ function act1Interact(){
     }
   }
 
-  // doors
   for (const d of act1Doors()){
     if (!aabb(pad, d)) continue;
 
@@ -433,11 +410,10 @@ function act1Interact(){
     }
 
     if (d.event === "secretDoor"){
-      if (!hasCode) {
+      if (!hasCode){
         ui.openDialog("The door is sealed.\n\nIt wants a word you do not have yet.");
         return;
       }
-      // transition to hub
       game.enterHub(true);
       return;
     }
@@ -445,11 +421,9 @@ function act1Interact(){
 }
 
 function drawAct1(){
-  // ink background
   ctx.fillStyle = "#050507";
   ctx.fillRect(0,0,W,H);
 
-  // drifting strokes
   const t = game.t;
   for (let i=0;i<9;i++){
     const y = (H*(i/9)) + Math.sin(t*0.7 + i)*18;
@@ -461,13 +435,11 @@ function drawAct1(){
     ctx.stroke();
   }
 
-  // walls
   const room = act1.rooms[act1.room];
   const walls = act1Walls();
   ctx.fillStyle = "rgba(255,255,255,0.06)";
   for (const w of walls) ctx.fillRect(w.x,w.y,w.w,w.h);
 
-  // doors
   for (const d of act1Doors()){
     const isSecret = d.event === "secretDoor";
     const visible = !isSecret || hasCode;
@@ -481,8 +453,7 @@ function drawAct1(){
     if (isSecret) glowText("SECRET DOOR", d.x + 10, d.y + d.h - 10, 0.7, 14);
   }
 
-  // eyes room effect
-  if (act1.room === "hall_eyes") {
+  if (act1.room === "hall_eyes"){
     const px = act1.player.x + act1.player.w/2;
     const py = act1.player.y + act1.player.h/2;
 
@@ -495,7 +466,7 @@ function drawAct1(){
       ctx.ellipse(e.x, e.y, e.r*2.3, e.r*1.2, 0, 0, Math.PI*2);
       ctx.fill();
 
-      if (blinking) {
+      if (blinking){
         ctx.strokeStyle = "rgba(255,255,255,0.10)";
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -526,8 +497,7 @@ function drawAct1(){
     ctx.fillRect(0,0,W,H);
   }
 
-  // NPC
-  if (act1.room === "code_room") {
+  if (act1.room === "code_room"){
     const npc = act1Npc();
     if (npc){
       ctx.save();
@@ -543,10 +513,8 @@ function drawAct1(){
     }
   }
 
-  // player avatar (uses avatar.png if present)
   drawAvatarOrFallback(act1.player, 0);
 
-  // room label + instructions
   glowText(room.name, 60, 84, 0.55, 18);
 
   ctx.font = "600 16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
@@ -560,7 +528,7 @@ function drawAct1(){
 }
 
 /* =========================
-   Act 2: Hub + side-scroller dungeon (all systems)
+   Act 2: Hub + Dungeon
 ========================= */
 const game = {
   state: "act1", // act1 | hub | dungeon
@@ -569,7 +537,6 @@ const game = {
   t: 0,
   inventory: [],
   cameraX: 0,
-
   quests: [],
   questIndex: 0,
 
@@ -586,11 +553,8 @@ const game = {
     face: 1,
     hp: 10, maxHp: 10,
     iFrames: 0,
-    dashCd: 0,
-    techCd: 0,
-    ultCd: 0,
-    ultMeter: 0,
-    atkCd: 0
+    dashCd: 0, techCd: 0, ultCd: 0,
+    ultMeter: 0, atkCd: 0
   },
 
   platforms: [],
@@ -607,7 +571,6 @@ const game = {
     this.quests = [];
     this.questIndex = 0;
 
-    // reset player
     const pl = this.player;
     pl.x = 140; pl.vx = 0; pl.vy = 0;
     pl.hp = pl.maxHp;
@@ -615,7 +578,7 @@ const game = {
     pl.dashCd = pl.techCd = pl.ultCd = pl.atkCd = 0;
     pl.iFrames = 0;
 
-    if (openDialog) {
+    if (openDialog){
       ui.openDialog(
         "The secret door opens.\n\n" +
         "Welcome to the real game.\n\n" +
@@ -629,7 +592,6 @@ const game = {
     this.cameraX = 0;
     this.inventory = [];
 
-    // ALL systems through quests
     this.quests = [
       { title:"Quest 1: First Blood", type:"kills", needed: 5, progress:0, done:false },
       { title:"Quest 2: Relic Hunt", type:"collect", needed: 3, progress:0, done:false },
@@ -637,7 +599,6 @@ const game = {
     ];
     this.questIndex = 0;
 
-    // player spawn
     const pl = this.player;
     pl.x = 120; pl.vx=0; pl.vy=0; pl.hp = pl.maxHp;
     pl.ultMeter = 0;
@@ -655,17 +616,10 @@ function placeHubObjects(){
   game.hub.board.y = groundY - game.hub.board.h;
   game.hub.door.y = groundY - game.hub.door.h;
 }
+function currentQuest(){ return game.quests[game.questIndex]; }
 
 function makeEnemy(x,y){
-  return {
-    x, y, w: 46, h: 62,
-    vx: 0, vy: 0,
-    hp: 3,
-    alive: true,
-    aggro: 520,
-    spd: rand(160, 220),
-    hitCd: 0
-  };
+  return { x,y,w:46,h:62,vx:0,vy:0,hp:3,alive:true,aggro:520,spd:rand(160,220),hitCd:0 };
 }
 function makeLoot(x,y,questRelic=false){
   const roll = Math.random();
@@ -675,10 +629,9 @@ function makeLoot(x,y,questRelic=false){
   else if (roll < 0.92) rarity = "rare";
   else if (roll < 0.985) rarity = "epic";
   else rarity = "mythic";
-
   const names = ["Ink Charm","Moon Thread","Hush Ring","Shiver Crest","Vault Token","Glass Fang","Neon Seal","Warden Key","Paper Relic","Star Scrap"];
   const name = questRelic ? "Relic Shard" : names[(Math.random()*names.length)|0];
-  return { x, y, w: 22, h: 22, vy: 0, taken:false, rarity, name, questRelic };
+  return { x,y,w:22,h:22,vy:0,taken:false,rarity,name,questRelic };
 }
 
 function genDungeon(){
@@ -691,10 +644,8 @@ function genDungeon(){
   const groundY = H - 160;
   const levelLen = 5200;
 
-  // main ground
   game.platforms.push({ x:-200, y: groundY, w: levelLen+400, h: 260 });
 
-  // stepping platforms
   let x = 260;
   for (let i=0;i<18;i++){
     const w = rand(140, 260);
@@ -703,28 +654,24 @@ function genDungeon(){
     x += rand(200, 340);
   }
 
-  // pits
   for (let i=0;i<6;i++){
     const px = rand(600, levelLen-800);
     const pw = rand(140, 240);
     game.pits.push({ x:px, w:pw });
   }
 
-  // enemies
   for (let i=0;i<14;i++){
     const ex = rand(520, levelLen-500);
     const ey = groundY - 80;
     game.enemies.push(makeEnemy(ex, ey));
   }
 
-  // quest relics
   for (let i=0;i<3;i++){
     const lx = rand(900, levelLen-900);
     const ly = groundY - rand(220, 380);
     game.loot.push(makeLoot(lx, ly, true));
   }
 
-  // exit
   game.exit.x = levelLen - 140;
   game.exit.y = groundY - 120;
   game.exit.w = 90;
@@ -735,7 +682,6 @@ function genDungeon(){
 
 function resolvePlatforms(body){
   body.onGround = false;
-
   for (const p of game.platforms){
     if (body.x + body.w < p.x || body.x > p.x + p.w) continue;
 
@@ -743,13 +689,13 @@ function resolvePlatforms(body){
     const wasAbove = prevY + body.h <= p.y + 2;
     const nowBelowTop = body.y + body.h >= p.y && body.y < p.y;
 
-    if (wasAbove && nowBelowTop) {
+    if (wasAbove && nowBelowTop){
       body.y = p.y - body.h;
       body.vy = 0;
       body.onGround = true;
     }
 
-    if (aabb(body, p) && !wasAbove) {
+    if (aabb(body, p) && !wasAbove){
       const mid = (body.x + body.w/2) - (p.x + p.w/2);
       if (mid < 0) body.x = p.x - body.w;
       else body.x = p.x + p.w;
@@ -758,17 +704,14 @@ function resolvePlatforms(body){
   }
 }
 
-function currentQuest(){ return game.quests[game.questIndex]; }
-
 function killEnemy(e){
   e.alive = false;
-
   if (chance(0.85)) game.loot.push(makeLoot(e.x + e.w/2, e.y + e.h/2, false));
 
   const q = currentQuest();
-  if (q && q.type === "kills" && !q.done) {
+  if (q && q.type === "kills" && !q.done){
     q.progress++;
-    if (q.progress >= q.needed) {
+    if (q.progress >= q.needed){
       q.done = true;
       game.questIndex++;
       ui.openDialog(`Quest complete: ${q.title}\n\nNext: ${game.quests[game.questIndex]?.title || "None"}`);
@@ -776,9 +719,7 @@ function killEnemy(e){
   }
 }
 
-/* =========================
-   Techniques (anime-ish, but yours)
-========================= */
+/* techniques */
 function basicAttack(){
   const pl = game.player;
   if (pl.atkCd > 0) return;
@@ -792,7 +733,7 @@ function basicAttack(){
 
   for (const e of game.enemies){
     if (!e.alive) continue;
-    if (aabb(hb, e)) {
+    if (aabb(hb, e)){
       e.hp -= 1;
       e.hitCd = 0.12;
       pl.ultMeter = clamp(pl.ultMeter + 8, 0, 100);
@@ -802,7 +743,6 @@ function basicAttack(){
     }
   }
 }
-
 function dash(){
   const pl = game.player;
   if (pl.dashCd > 0) return;
@@ -810,38 +750,25 @@ function dash(){
   pl.vx = pl.face * 820;
   pl.iFrames = Math.max(pl.iFrames, 0.22);
 }
-
 function technique(){
   const pl = game.player;
   if (pl.techCd > 0) return;
   pl.techCd = 2.2;
-
-  const speed = 720;
-  const proj = {
-    x: pl.face>0 ? pl.x+pl.w : pl.x-16,
-    y: pl.y + 28,
-    w: 18, h: 10,
-    vx: pl.face * speed,
-    life: 0.75
-  };
+  const proj = { x: pl.face>0 ? pl.x+pl.w : pl.x-16, y: pl.y+28, w:18, h:10, vx: pl.face * 720, life: 0.75 };
   game.projectiles.push(proj);
 }
-
 function ultimate(){
   const pl = game.player;
   if (pl.ultCd > 0) return;
   if (pl.ultMeter < 100) return;
-
   pl.ultMeter = 0;
   pl.ultCd = 9.0;
   pl.iFrames = Math.max(pl.iFrames, 0.8);
 
-  const camL = game.cameraX;
-  const camR = camL + W;
-
+  const camL = game.cameraX, camR = camL + W;
   for (const e of game.enemies){
     if (!e.alive) continue;
-    if (e.x+e.w > camL && e.x < camR) {
+    if (e.x+e.w > camL && e.x < camR){
       e.hp -= 3;
       e.hitCd = 0.18;
       e.vx += (Math.random()<0.5?-1:1)*240;
@@ -851,62 +778,40 @@ function ultimate(){
   }
 }
 
-/* =========================
-   Hub interactions
-========================= */
+/* hub */
 function hubInteract(){
   const pl = game.player;
   placeHubObjects();
-
   const pad = { x:pl.x-10, y:pl.y-10, w:pl.w+20, h:pl.h+20 };
 
-  if (aabb(pad, game.hub.npc)) {
+  if (aabb(pad, game.hub.npc)){
     ui.openDialog(
-      "Mentor:\n\n" +
-      "You made it.\n\n" +
-      "Get quests from the board.\n" +
-      "Enter the gate.\n\n" +
-      "This run resets every visit.\nSo make it count anyway."
+      "Mentor:\n\nGet quests from the board.\nEnter the gate.\n\nThis resets every visit.\nSo make it count anyway."
     );
     return;
   }
-
-  if (aabb(pad, game.hub.board)) {
+  if (aabb(pad, game.hub.board)){
     ui.openDialog(
-      "QUEST BOARD:\n\n" +
-      "1) First Blood: defeat 5 prowlers\n" +
-      "2) Relic Hunt: collect 3 shards\n" +
-      "3) Reach the Exit\n\n" +
-      "Enter the Dungeon Gate when ready."
+      "QUEST BOARD:\n\n1) First Blood: defeat 5 prowlers\n2) Relic Hunt: collect 3 shards\n3) Reach the Exit\n\nEnter the Dungeon Gate when ready."
     );
     return;
   }
-
-  if (aabb(pad, game.hub.door)) {
+  if (aabb(pad, game.hub.door)){
     game.startRun();
-    return;
   }
 }
 
-/* =========================
-   Update (Hub + Dungeon)
-========================= */
 function updateHub(dt){
   const pl = game.player;
   const groundY = H - 160;
 
-  const accel = 2200;
-  const maxSpd = 420;
-  const friction = 2200;
-
+  const accel = 2200, maxSpd = 420, friction = 2200;
   let move = 0;
   if (keys.has("a") || keys.has("arrowleft")) move -= 1;
   if (keys.has("d") || keys.has("arrowright")) move += 1;
 
-  if (move !== 0) {
-    pl.face = move;
-    pl.vx += move * accel * dt;
-  } else {
+  if (move !== 0){ pl.face = move; pl.vx += move * accel * dt; }
+  else {
     if (pl.vx > 0) pl.vx = Math.max(0, pl.vx - friction*dt);
     else if (pl.vx < 0) pl.vx = Math.min(0, pl.vx + friction*dt);
   }
@@ -919,7 +824,7 @@ function updateHub(dt){
   pl.x += pl.vx * dt;
   pl.y += pl.vy * dt;
 
-  if (pl.y + pl.h >= groundY) {
+  if (pl.y + pl.h >= groundY){
     pl.y = groundY - pl.h;
     pl.vy = 0;
     pl.onGround = true;
@@ -928,39 +833,30 @@ function updateHub(dt){
   pl.x = clamp(pl.x, 40, W - 80);
 
   if (pressed.has("enter")) hubInteract();
-  if (pressed.has("q") || pressed.has("e") || pressed.has("r")) {
-    ui.openDialog("Techniques are for the dungeon.\n\nEnter the gate when you're ready.");
-  }
 }
 
+/* dungeon */
 function updateDungeon(dt){
   const pl = game.player;
 
-  // timers
   pl.dashCd = Math.max(0, pl.dashCd - dt);
   pl.techCd = Math.max(0, pl.techCd - dt);
   pl.ultCd  = Math.max(0, pl.ultCd  - dt);
   pl.atkCd  = Math.max(0, pl.atkCd  - dt);
   pl.iFrames = Math.max(0, pl.iFrames - dt);
 
-  // actions
   if (pressed.has("q")) dash();
   if (pressed.has("e")) technique();
   if (pressed.has("r")) ultimate();
   if (pressed.has("enter")) basicAttack();
 
-  const accel = 2600;
-  const maxSpd = 520;
-  const friction = 2400;
-
+  const accel = 2600, maxSpd = 520, friction = 2400;
   let move = 0;
   if (keys.has("a") || keys.has("arrowleft")) move -= 1;
   if (keys.has("d") || keys.has("arrowright")) move += 1;
 
-  if (move !== 0) {
-    pl.face = move;
-    pl.vx += move * accel * dt;
-  } else {
+  if (move !== 0){ pl.face = move; pl.vx += move * accel * dt; }
+  else {
     if (pl.vx > 0) pl.vx = Math.max(0, pl.vx - friction*dt);
     else if (pl.vx < 0) pl.vx = Math.min(0, pl.vx + friction*dt);
   }
@@ -975,25 +871,21 @@ function updateDungeon(dt){
 
   resolvePlatforms(pl);
 
-  // pits force fall if on “ground”
   const groundY = H - 160;
   for (const pit of game.pits){
-    if (pl.x + pl.w > pit.x && pl.x < pit.x + pit.w) {
+    if (pl.x + pl.w > pit.x && pl.x < pit.x + pit.w){
       if (pl.y + pl.h >= groundY - 8 && pl.onGround) pl.onGround = false;
     }
   }
 
-  // death by falling
-  if (pl.y > H + 900) {
+  if (pl.y > H + 900){
     ui.openDialog("You fell.\n\nRun resets.");
     game.startRun();
     return;
   }
 
-  // camera
   game.cameraX = clamp(pl.x - W*0.45, 0, 5200 - W + 200);
 
-  // enemies
   for (const e of game.enemies){
     if (!e.alive) continue;
     e.hitCd = Math.max(0, e.hitCd - dt);
@@ -1008,14 +900,13 @@ function updateDungeon(dt){
     const dx = (pl.x + pl.w/2) - (e.x + e.w/2);
     const abs = Math.abs(dx);
     if (abs < e.aggro) e.vx += Math.sign(dx) * e.spd * 0.8 * dt;
-    else e.vx += Math.sin((e.x+e.y)*0.01) * 18 * dt;
 
-    if (aabb(pl, e) && pl.iFrames <= 0) {
+    if (aabb(pl, e) && pl.iFrames <= 0){
       pl.hp -= 1;
       pl.iFrames = 0.6;
       pl.vx += -Math.sign(dx||1) * 520;
       pl.vy = -520;
-      if (pl.hp <= 0) {
+      if (pl.hp <= 0){
         ui.openDialog("You blacked out.\n\nRun resets.");
         game.startRun();
         return;
@@ -1023,14 +914,13 @@ function updateDungeon(dt){
     }
   }
 
-  // projectiles
   for (const pr of game.projectiles){
     pr.life -= dt;
     pr.x += pr.vx * dt;
 
     for (const e of game.enemies){
       if (!e.alive) continue;
-      if (aabb(pr, e)) {
+      if (aabb(pr, e)){
         e.hp -= 2;
         e.hitCd = 0.12;
         pl.ultMeter = clamp(pl.ultMeter + 12, 0, 100);
@@ -1043,7 +933,6 @@ function updateDungeon(dt){
   }
   game.projectiles = game.projectiles.filter(p=>p.life>0 && p.x>-400 && p.x<6000);
 
-  // loot
   for (const it of game.loot){
     if (it.taken) continue;
     it.vy += game.gravity * 0.35 * dt;
@@ -1053,17 +942,17 @@ function updateDungeon(dt){
       if (it.x+it.w < p.x || it.x > p.x+p.w) continue;
       const wasAbove = (it.y - it.vy*dt) + it.h <= p.y+2;
       const now = it.y + it.h >= p.y && it.y < p.y;
-      if (wasAbove && now) { it.y = p.y - it.h; it.vy = 0; }
+      if (wasAbove && now){ it.y = p.y - it.h; it.vy = 0; }
     }
 
-    if (aabb(pl, it)) {
+    if (aabb(pl, it)){
       it.taken = true;
       game.inventory.push({ name: it.name, rarity: it.rarity, questRelic: it.questRelic });
 
       const q = currentQuest();
-      if (q && q.type === "collect" && !q.done) {
+      if (q && q.type === "collect" && !q.done){
         if (it.questRelic) q.progress++;
-        if (q.progress >= q.needed) {
+        if (q.progress >= q.needed){
           q.done = true;
           game.questIndex++;
           ui.openDialog(`Quest complete: ${q.title}\n\nNext: ${game.quests[game.questIndex]?.title || "None"}`);
@@ -1072,10 +961,9 @@ function updateDungeon(dt){
     }
   }
 
-  // reach exit
   const q = currentQuest();
-  if (q && q.type === "reach" && !q.done) {
-    if (aabb(pl, game.exit)) {
+  if (q && q.type === "reach" && !q.done){
+    if (aabb(pl, game.exit)){
       q.done = true;
       ui.openDialog("You reached the exit.\n\nRun complete.\n\nBack to hub.");
       game.enterHub(false);
@@ -1084,33 +972,25 @@ function updateDungeon(dt){
   }
 }
 
-/* =========================
-   Render Hub/Dungeon
-========================= */
+/* render act2 */
 function drawHub(){
   const groundY = H - 160;
   ctx.fillStyle = "rgba(255,255,255,0.06)";
   ctx.fillRect(0, groundY, W, 260);
-
   glowText("HUB", 34, 58, 0.9, 20);
 
   placeHubObjects();
 
-  // NPC
   ctx.fillStyle = "rgba(255,255,255,0.06)";
   roundRect(game.hub.npc.x, game.hub.npc.y, game.hub.npc.w, game.hub.npc.h, 18, true, false);
   glowText("Mentor", game.hub.npc.x-10, game.hub.npc.y-10, 0.5, 14);
   ctx.fillStyle = "rgba(0,0,0,0.35)";
   ctx.fillRect(game.hub.npc.x+12, game.hub.npc.y+28, game.hub.npc.w-24, 6);
 
-  // board
   ctx.fillStyle = "rgba(255,255,255,0.05)";
   roundRect(game.hub.board.x, game.hub.board.y, game.hub.board.w, game.hub.board.h, 16, true, false);
   glowText("Board", game.hub.board.x, game.hub.board.y-10, 0.5, 14);
-  ctx.strokeStyle = "rgba(255,255,255,0.10)";
-  ctx.strokeRect(game.hub.board.x+10, game.hub.board.y+18, game.hub.board.w-20, game.hub.board.h-28);
 
-  // gate
   ctx.save();
   ctx.shadowColor = "rgba(255,80,80,0.20)";
   ctx.shadowBlur = 26;
@@ -1119,7 +999,6 @@ function drawHub(){
   ctx.restore();
   glowText("Dungeon Gate", game.hub.door.x-40, game.hub.door.y-10, 0.55, 14);
 
-  // player
   drawAvatarOrFallback(game.player, 0);
 }
 
@@ -1136,7 +1015,6 @@ function drawDungeon(){
   ctx.fillStyle = "rgba(0,0,0,0.65)";
   for (const pit of game.pits) ctx.fillRect(pit.x, groundY, pit.w, 260);
 
-  // platforms
   ctx.fillStyle = "rgba(120,180,255,0.07)";
   for (const p of game.platforms){
     if (p.y > groundY-2 && p.h>200) continue;
@@ -1145,14 +1023,10 @@ function drawDungeon(){
     ctx.strokeRect(p.x+0.5,p.y+0.5,p.w-1,p.h-1);
   }
 
-  // exit
   ctx.fillStyle = "rgba(255,255,255,0.06)";
   roundRect(game.exit.x, game.exit.y, game.exit.w, game.exit.h, 18, true, false);
-  ctx.strokeStyle = "rgba(255,255,255,0.10)";
-  roundRect(game.exit.x+0.5, game.exit.y+0.5, game.exit.w-1, game.exit.h-1, 18, false, true);
   glowText("EXIT", game.exit.x + 14, game.exit.y - 10, 0.6, 16);
 
-  // loot
   for (const it of game.loot){
     if (it.taken) continue;
     ctx.save();
@@ -1163,35 +1037,20 @@ function drawDungeon(){
     ctx.restore();
   }
 
-  // enemies
   for (const e of game.enemies){
     if (!e.alive) continue;
     ctx.save();
     ctx.shadowColor = "rgba(255,255,255,0.08)";
     ctx.shadowBlur = 14;
-
     ctx.fillStyle = "rgba(0,0,0,0.55)";
     roundRect(e.x, e.y, e.w, e.h, 16, true, false);
-
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
-    ctx.lineWidth = 2;
-    for (let i=0;i<6;i++){
-      const xx = e.x + 8 + i*6;
-      ctx.beginPath();
-      ctx.moveTo(xx, e.y + e.h - 6);
-      ctx.lineTo(xx+2, e.y + e.h);
-      ctx.stroke();
-    }
-
-    if (e.hitCd > 0) {
+    if (e.hitCd > 0){
       ctx.fillStyle = "rgba(255,255,255,0.08)";
       roundRect(e.x-2, e.y-2, e.w+4, e.h+4, 18, true, false);
     }
-
     ctx.restore();
   }
 
-  // projectiles
   for (const pr of game.projectiles){
     ctx.save();
     ctx.shadowColor = "rgba(120,180,255,0.25)";
@@ -1201,37 +1060,31 @@ function drawDungeon(){
     ctx.restore();
   }
 
-  // player avatar
   drawAvatarOrFallback(game.player, cam);
 
   ctx.restore();
 }
 
 function drawHUD(){
-  const pl = (game.state === "act1") ? act1.player : game.player;
-
   ctx.save();
   ctx.fillStyle = "rgba(0,0,0,0.35)";
   roundRect(12, 12, 520, 120, 16, true, false);
   ctx.strokeStyle = "rgba(255,255,255,0.10)";
-  roundRect(12.5, 12.5, 520-1, 120-1, 16, false, true);
+  roundRect(12.5, 12.5, 519, 119, 16, false, true);
 
   ctx.fillStyle = "rgba(255,255,255,0.80)";
   ctx.font = "700 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-  const label = (game.state === "act1") ? "ACT 1" : (game.state === "hub" ? "HUB" : "DUNGEON RUN");
-  ctx.fillText(label, 26, 36);
+  ctx.fillText(game.state === "act1" ? "ACT 1" : (game.state === "hub" ? "HUB" : "DUNGEON RUN"), 26, 36);
 
-  // Act1: show code progress only
-  if (game.state === "act1") {
+  if (game.state === "act1"){
     ctx.fillStyle = "rgba(255,255,255,0.55)";
     ctx.font = "600 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.fillText(hasCode ? "code found: larp" : "find the word", 26, 60);
-    ctx.fillText("Enter = interact", 26, 82);
     ctx.restore();
     return;
   }
 
-  // HP
+  const pl = game.player;
   ctx.fillStyle = "rgba(255,255,255,0.35)";
   ctx.font = "600 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
   ctx.fillText("HP", 26, 56);
@@ -1240,7 +1093,6 @@ function drawHUD(){
   ctx.strokeStyle = "rgba(255,255,255,0.10)";
   ctx.strokeRect(56.5, 46.5, pl.maxHp * 20, 10);
 
-  // ULT
   ctx.fillStyle = "rgba(255,255,255,0.35)";
   ctx.fillText("ULT", 26, 76);
   ctx.fillStyle = "rgba(120,180,255,0.35)";
@@ -1251,9 +1103,9 @@ function drawHUD(){
   ctx.fillStyle = "rgba(255,255,255,0.45)";
   ctx.fillText(`Q dash: ${pl.dashCd>0 ? pl.dashCd.toFixed(1)+"s" : "ready"}   E tech: ${pl.techCd>0 ? pl.techCd.toFixed(1)+"s":"ready"}   R ult: ${pl.ultCd>0 ? pl.ultCd.toFixed(1)+"s":"ready"}`, 26, 98);
 
-  if (game.state === "dungeon") {
+  if (game.state === "dungeon"){
     const q = currentQuest();
-    if (q) {
+    if (q){
       const prog = (q.type==="kills" || q.type==="collect") ? ` (${q.progress}/${q.needed})` : "";
       ctx.fillStyle = "rgba(255,255,255,0.55)";
       ctx.fillText(`Quest: ${q.title}${prog}`, 26, 118);
@@ -1277,65 +1129,47 @@ function loop(){
   game.dt = dt;
   game.t += dt;
 
-  // background texture
-  ctx.fillStyle = "#050507";
-  ctx.fillRect(0,0,W,H);
-  for (let i=0;i<10;i++){
-    const y = (H*(i/10)) + Math.sin(game.t*0.7 + i)*14;
-    ctx.strokeStyle = "rgba(255,255,255,0.02)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0,y);
-    ctx.lineTo(W,y);
-    ctx.stroke();
-  }
-
-  // pause gameplay when UI open
   const paused = !!ui.panel;
 
-  if (!paused) {
-    if (game.state === "act1") {
+  if (!paused){
+    if (game.state === "act1"){
       act1Move(dt);
       if (pressed.has("enter")) act1Interact();
-    } else if (game.state === "hub") {
+    } else if (game.state === "hub"){
       updateHub(dt);
+      if (pressed.has("i")) ui.toggleInventory();
     } else {
       updateDungeon(dt);
+      if (pressed.has("i")) ui.toggleInventory();
     }
-
-    // inventory toggle anytime outside act1
-    if ((game.state === "hub" || game.state === "dungeon") && pressed.has("i")) ui.toggleInventory();
   } else {
-    // allow toggles while paused
     if (pressed.has("i")) ui.toggleInventory();
   }
 
-  // draw state
   if (game.state === "act1") drawAct1();
   else if (game.state === "hub") drawHub();
   else drawDungeon();
 
   drawHUD();
-  ui.draw();
+  ui.draw(game);
 
   pressed.clear();
   requestAnimationFrame(loop);
 }
 
 /* =========================
-   Start in Act 1 (stitched together)
+   Boot
 ========================= */
 game.state = "act1";
 act1.player.y = act1.groundY() - act1.player.h;
 
-// Optional intro dialog
 ui.openDialog(
-  "You found the hidden path.\n\n" +
-  "Act 1: the Hall of Eyes.\nFind the word. Use the door.\n\n" +
-  "Act 2: the real game.\n\n" +
-  "(Esc closes this.)"
+  "You found the hidden path.\n\nAct 1: the Hall of Eyes.\nFind the word. Use the door.\n\nAct 2: the real game.\n\n(Esc closes this.)"
 );
 
+/* ✅ IMPORTANT FIX:
+   Only call resize() AFTER eyes/initEyes are defined */
+resize();
 loop();
 </script>
 </body>
