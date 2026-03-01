@@ -11,11 +11,16 @@
   #help{
     position:fixed; left:12px; bottom:12px;
     font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    color: rgba(255,255,255,0.65);
+    color: rgba(255,255,255,0.55);
     user-select:none;
-    max-width: 980px;
     line-height: 1.25;
     z-index: 5;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.10);
+    padding: 8px 10px;
+    border-radius: 12px;
+    backdrop-filter: blur(6px);
+    max-width: min(980px, calc(100vw - 24px));
   }
   a#back{
     position: fixed; right: 12px; bottom: 12px;
@@ -26,6 +31,7 @@
     padding: 8px 10px; border-radius: 12px;
     background: rgba(0,0,0,0.35);
     z-index: 5;
+    backdrop-filter: blur(6px);
   }
 </style>
 </head>
@@ -67,14 +73,12 @@ window.addEventListener("keydown", (e)=>{
   if (!keys.has(k)) pressed.add(k);
   keys.add(k);
 
-  // menu choice keys when a menu is open
   if (ui.panel === "menu"){
     if (k === "1") ui.pick(0);
     if (k === "2") ui.pick(1);
     if (k === "3") ui.pick(2);
     if (k === "4") ui.pick(3);
   }
-
   if (k === "escape") ui.closeAll();
 });
 window.addEventListener("keyup", (e)=> keys.delete(e.key.toLowerCase()) );
@@ -100,13 +104,13 @@ function roundRect(x,y,w,h,r,fill,stroke){
   if (fill) ctx.fill();
   if (stroke) ctx.stroke();
 }
-function glowText(text,x,y,alpha=1,size=18){
+function glowText(text,x,y,alpha=1,size=16){
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.font = `700 ${size}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
   ctx.fillStyle = "rgba(255,255,255,0.78)";
   ctx.shadowColor = "rgba(120,180,255,0.25)";
-  ctx.shadowBlur = 12;
+  ctx.shadowBlur = 10;
   ctx.fillText(text, x, y);
   ctx.restore();
 }
@@ -123,15 +127,24 @@ function drawWrapped(text,x,y,maxW,lineH){
   }
   if (line) ctx.fillText(line, x, y);
 }
+function drawThinLabel(text, x, y){
+  ctx.save();
+  ctx.font = "700 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.shadowColor = "rgba(0,0,0,0.8)";
+  ctx.shadowBlur = 8;
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
 
 /* =========================
    UI panels (dialog + menu + inventory)
 ========================= */
 const ui = {
-  panel: null,         // null | "dialog" | "menu" | "inventory"
+  panel: null,
   dialogText: "",
   menuTitle: "",
-  menuOptions: [],     // [{label, action}]
+  menuOptions: [],
   invScroll: 0,
 
   closeAll(){ this.panel=null; this.menuOptions=[]; },
@@ -151,7 +164,6 @@ const ui = {
     if (this.panel !== "menu") return;
     const opt = this.menuOptions[idx];
     if (!opt) return;
-    // run action
     opt.action();
   },
 
@@ -163,16 +175,16 @@ const ui = {
     if (!this.panel) return;
 
     const pad=18;
-    const boxW = Math.min(860, W-40);
+    const boxW = Math.min(820, W-40);
     const boxH =
       this.panel==="inventory" ? Math.min(460, H-120) :
-      this.panel==="menu" ? Math.min(360, H-120) :
-      Math.min(300, H-120);
+      this.panel==="menu" ? Math.min(340, H-120) :
+      Math.min(280, H-120);
 
     const x = (W-boxW)/2, y=(H-boxH)/2;
 
     ctx.save();
-    ctx.fillStyle = "rgba(0,0,0,0.70)";
+    ctx.fillStyle = "rgba(0,0,0,0.72)";
     ctx.fillRect(0,0,W,H);
 
     ctx.fillStyle = "rgba(14,14,18,0.92)";
@@ -182,23 +194,22 @@ const ui = {
     roundRect(x+0.5,y+0.5,boxW-1,boxH-1,16,false,true);
 
     if (this.panel==="dialog"){
-      ctx.fillStyle = "rgba(255,255,255,0.82)";
-      ctx.font = "600 16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      drawWrapped(this.dialogText, x+pad, y+pad+6, boxW-pad*2, 20);
+      ctx.fillStyle = "rgba(255,255,255,0.84)";
+      ctx.font = "600 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      drawWrapped(this.dialogText, x+pad, y+pad+6, boxW-pad*2, 19);
 
       ctx.fillStyle = "rgba(255,255,255,0.45)";
       ctx.font = "500 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillText("Press Esc to close.", x+pad, y+boxH-18);
+      ctx.fillText("Esc to close.", x+pad, y+boxH-18);
     }
 
     if (this.panel==="menu"){
       ctx.fillStyle = "rgba(255,255,255,0.86)";
-      ctx.font = "800 16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.font = "800 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.fillText(this.menuTitle, x+pad, y+pad+2);
 
-      ctx.fillStyle = "rgba(255,255,255,0.70)";
       ctx.font = "600 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      let yy = y+pad+40;
+      let yy = y+pad+36;
       for (let i=0;i<this.menuOptions.length;i++){
         const opt = this.menuOptions[i];
         ctx.fillStyle = "rgba(255,255,255,0.08)";
@@ -210,7 +221,7 @@ const ui = {
 
       ctx.fillStyle = "rgba(255,255,255,0.45)";
       ctx.font = "500 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillText("Press 1–4 to choose. Esc to close.", x+pad, y+boxH-18);
+      ctx.fillText("Press 1–4. Esc closes.", x+pad, y+boxH-18);
     }
 
     if (this.panel==="inventory"){
@@ -264,7 +275,7 @@ function drawAvatarOrFallback(pl, camX=0){
 
   ctx.save();
   ctx.shadowColor = "rgba(120,180,255,0.25)";
-  ctx.shadowBlur = 26;
+  ctx.shadowBlur = 22;
   ctx.strokeStyle = "rgba(120,180,255,0.10)";
   ctx.lineWidth = 3;
   ctx.beginPath();
@@ -286,7 +297,7 @@ function drawAvatarOrFallback(pl, camX=0){
     return;
   }
 
-  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  ctx.fillStyle = "rgba(255,255,255,0.10)";
   roundRect(x, y, pl.w, pl.h, 18, true, false);
   ctx.fillStyle = "rgba(0,0,0,0.35)";
   ctx.fillRect(x+8, y+22, pl.w-16, 4);
@@ -295,7 +306,6 @@ function drawAvatarOrFallback(pl, camX=0){
 /* =========================
    ACT 1
 ========================= */
-const SECRET_CODE = "larp";
 let hasCode = false;
 
 const act1 = {
@@ -312,17 +322,16 @@ const act1 = {
       name: "THE VOID",
       walls: (W,H)=>[
         {x:40,y:40,w:W-80,h:20},{x:40,y:40,w:20,h:H-80},
-        {x:40,y:H-60,w:W-80,h:20},{x:W-60,y:40,w:20,h:H-80},
-        {x:W*0.44,y:H*0.28,w:28,h:160}
+        {x:40,y:H-60,w:W-80,h:20},{x:W-60,y:40,w:20,h:H-80}
       ],
       doors: (W,H,g)=>[
-        {x:W-96,y:g-120,w:42,h:120,to:"hall_eyes", spawn:{x:120,y:g-72}}
+        {x:W-96,y:g-120,w:44,h:120,to:"hall_eyes", spawn:{x:120,y:g-72}, label:"HALL"}
       ],
       npc: (W,H,g)=>({ x: W*0.18, y: g - 96, w: 56, h: 96 }),
       text: [
         {t:"YOU CLICKED.", y:110},
         {t:"SO THE ROOM OPENED.", y:136},
-        {t:"THE DOOR IS RIGHT.", y:(H)=>H-80}
+        {t:"THE DOOR IS RIGHT.", y:(H)=>H-84}
       ]
     },
 
@@ -331,18 +340,18 @@ const act1 = {
       walls: (W,H)=>[
         {x:40,y:40,w:W-80,h:20},{x:40,y:40,w:20,h:H-80},
         {x:40,y:H-60,w:W-80,h:20},{x:W-60,y:40,w:20,h:H-80},
-        {x:W*0.26,y:90,w:28,h:H*0.55},
-        {x:W*0.74-28,y:90,w:28,h:H*0.55}
+        {x:W*0.26,y:90,w:26,h:H*0.55},
+        {x:W*0.74-26,y:90,w:26,h:H*0.55}
       ],
       doors: (W,H,g)=>[
-        {x:54,y:g-120,w:42,h:120,to:"void", spawn:{x:W*0.50,y:g-72}},
+        // back to void (far left)
+        {x:54,y:g-120,w:44,h:120,to:"void", spawn:{x:W*0.50,y:g-72}, label:"BACK"},
 
-        /* ✅ FIX: CODE ROOM DOOR NOW REACHABLE
-           was high; now sits near the ground with a big hitbox */
-        {x:W*0.5-90,y:g-190,w:180,h:140,to:"code_room", spawn:{x:W*0.5-40,y:g-72}},
+        // ✅ FIX: code-room door moved to LEFT-CENTER and near floor, NOT overlapping secret
+        {x:W*0.30-60, y:g-140, w:120, h:110, to:"code_room", spawn:{x:W*0.50-40,y:g-72}, label:"CODE"},
 
-        // secret door at bottom center
-        {x:W*0.5-90,y:g-52,w:180,h:40,event:"secretDoor"}
+        // secret door moved to RIGHT-CENTER, near floor, slim
+        {x:W*0.70-70, y:g-105, w:140, h:75, event:"secretDoor", label:"SECRET"}
       ],
       text: [
         {t:"DON'T LOOK LEFT.", y:110},
@@ -356,10 +365,10 @@ const act1 = {
       walls: (W,H)=>[
         {x:40,y:40,w:W-80,h:20},{x:40,y:40,w:20,h:H-80},
         {x:40,y:H-60,w:W-80,h:20},{x:W-60,y:40,w:20,h:H-80},
-        {x:W*0.5-130,y:H*0.58,w:260,h:26}
+        {x:W*0.5-160,y:H*0.62,w:320,h:24}
       ],
       doors: (W,H,g)=>[
-        {x:W*0.5-70,y:g+2,w:140,h:20,to:"hall_eyes", spawn:{x:W*0.5-40,y:g-180}}
+        {x:W*0.5-70,y:g+2,w:140,h:18,to:"hall_eyes", spawn:{x:W*0.50,y:g-92}, label:"RETURN"}
       ],
       npc: (W,H,g)=>({ x: W*0.5-28, y: g - 150, w: 70, h: 120 }),
       text: [
@@ -413,14 +422,8 @@ function clampAct1InsideRoom(){
 function act1Move(dt){
   const pl = act1.player;
 
-  // tight (not slippery)
-  const accel = 2600;
-  const maxSpd = 520;
-  const friction = 5200;
-
-  const jumpVel = -820;
-  const coyoteTime = 0.10;
-  const jumpBuffer = 0.12;
+  const accel = 2600, maxSpd = 520, friction = 5200;
+  const jumpVel = -820, coyoteTime = 0.10, jumpBuffer = 0.12;
 
   let move = 0;
   if (keys.has("a") || keys.has("arrowleft")) move -= 1;
@@ -487,18 +490,12 @@ function act1Move(dt){
 
 function act1Interact(){
   const pl = act1.player;
-
-  // BIG interact padding so doors are always usable
-  const pad = { x:pl.x-30, y:pl.y-30, w:pl.w+60, h:pl.h+60 };
+  const pad = { x:pl.x-32, y:pl.y-32, w:pl.w+64, h:pl.h+64 };
 
   if (act1.room === "void"){
     const npc = act1Npc();
     if (npc && aabb(pad, npc)){
-      ui.openDialog(
-        "Little figure:\n\n" +
-        "\"Hall of Eyes through the right door.\"\n" +
-        "\"The word is held by someone else.\""
-      );
+      ui.openDialog("Little figure:\n\n“Hall of Eyes is next.”\n“The word is held by someone else.”");
       return;
     }
   }
@@ -507,17 +504,13 @@ function act1Interact(){
     const npc = act1Npc();
     if (npc && aabb(pad, npc)){
       hasCode = true;
-      ui.openDialog(
-        "The figure speaks like a narrator.\n\n" +
-        "CODE: larp\n\n" +
-        "\"Return to the hallway.\"\n" +
-        "\"The secret door will listen.\""
-      );
+      ui.openDialog("The figure speaks like a narrator.\n\nCODE: larp\n\n“Return to the hallway.”\n“The secret door will listen.”");
       return;
     }
   }
 
   for (const d of act1Doors()){
+    if (d.event === "secretDoor" && !hasCode) continue;
     if (!aabb(pad, d)) continue;
 
     if (d.to){
@@ -531,16 +524,13 @@ function act1Interact(){
     }
 
     if (d.event === "secretDoor"){
-      if (!hasCode){
-        ui.openDialog("The door is sealed.\n\nIt wants the word.");
-        return;
-      }
       game.enterHub(true);
       return;
     }
   }
 }
 
+/* ===== Act 1 draw helpers ===== */
 function drawAct1FloorAndTexture(){
   const g = act1.groundY();
 
@@ -557,33 +547,45 @@ function drawAct1FloorAndTexture(){
     ctx.stroke();
   }
 
-  for (let i=0;i<10;i++){
-    const y = 70 + i*(H-140)/10 + Math.sin(game.t*0.6 + i)*10;
-    ctx.strokeStyle = "rgba(120,180,255,0.035)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(40, y);
-    ctx.bezierCurveTo(W*0.35, y-40, W*0.65, y+40, W-40, y);
-    ctx.stroke();
-  }
-
-  const grad = ctx.createRadialGradient(W*0.5, H*0.55, Math.min(W,H)*0.2, W*0.5, H*0.55, Math.max(W,H)*0.8);
+  const grad = ctx.createRadialGradient(W*0.5, H*0.55, Math.min(W,H)*0.22, W*0.5, H*0.55, Math.max(W,H)*0.85);
   grad.addColorStop(0, "rgba(0,0,0,0)");
-  grad.addColorStop(1, "rgba(0,0,0,0.55)");
+  grad.addColorStop(1, "rgba(0,0,0,0.62)");
   ctx.fillStyle = grad;
   ctx.fillRect(0,0,W,H);
 }
 
 function drawSmallNpc(npc, label){
   ctx.save();
-  ctx.shadowColor = "rgba(255,255,255,0.08)";
+  ctx.shadowColor = "rgba(255,255,255,0.06)";
   ctx.shadowBlur = 14;
-  ctx.fillStyle = "rgba(255,255,255,0.09)";
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
   roundRect(npc.x, npc.y, npc.w, npc.h, 16, true, false);
   ctx.restore();
   ctx.fillStyle = "rgba(0,0,0,0.40)";
   ctx.fillRect(npc.x + 14, npc.y + 30, npc.w - 28, 6);
-  glowText(label, npc.x - 6, npc.y - 10, 0.45, 14);
+  drawThinLabel(label, npc.x, npc.y - 8);
+}
+
+function drawDoor(d, canUse){
+  // slim door frame (not a giant block)
+  ctx.save();
+  ctx.globalAlpha = canUse ? 1 : 0.22;
+
+  const isSecret = d.event === "secretDoor";
+  const frame = isSecret ? "rgba(255,80,80,0.38)" : "rgba(120,180,255,0.32)";
+  const fill  = isSecret ? "rgba(255,80,80,0.06)" : "rgba(120,180,255,0.05)";
+
+  ctx.fillStyle = fill;
+  roundRect(d.x, d.y, d.w, d.h, 10, true, false);
+
+  ctx.strokeStyle = frame;
+  ctx.lineWidth = 2;
+  roundRect(d.x+0.5, d.y+0.5, d.w-1, d.h-1, 10, false, true);
+
+  if (d.label){
+    drawThinLabel(d.label, d.x + 10, d.y - 8);
+  }
+  ctx.restore();
 }
 
 function drawAct1(){
@@ -594,22 +596,10 @@ function drawAct1(){
 
   const room = act1.rooms[act1.room];
   const walls = act1Walls();
-  ctx.fillStyle = "rgba(255,255,255,0.06)";
+  ctx.fillStyle = "rgba(255,255,255,0.045)";
   for (const w of walls) ctx.fillRect(w.x,w.y,w.w,w.h);
 
-  for (const d of act1Doors()){
-    const isSecret = d.event === "secretDoor";
-    const visible = !isSecret || hasCode;
-    if (!visible) continue;
-
-    ctx.fillStyle = isSecret ? "rgba(255,80,80,0.14)" : "rgba(120,180,255,0.12)";
-    ctx.fillRect(d.x,d.y,d.w,d.h);
-    ctx.strokeStyle = isSecret ? "rgba(255,80,80,0.24)" : "rgba(120,180,255,0.22)";
-    ctx.strokeRect(d.x+0.5,d.y+0.5,d.w-1,d.h-1);
-
-    if (isSecret) glowText("SECRET", d.x + 10, d.y + 26, 0.55, 14);
-  }
-
+  // eyes
   if (act1.room === "hall_eyes"){
     const px = act1.player.x + act1.player.w/2;
     const py = act1.player.y + act1.player.h/2;
@@ -619,35 +609,35 @@ function drawAct1(){
       const blinking = Math.sin(e.blink/14) > 0.992;
 
       ctx.beginPath();
-      ctx.fillStyle = "rgba(255,255,255,0.04)";
+      ctx.fillStyle = "rgba(255,255,255,0.035)";
       ctx.ellipse(e.x, e.y, e.r*2.3, e.r*1.2, 0, 0, Math.PI*2);
       ctx.fill();
 
-      if (blinking){
-        ctx.strokeStyle = "rgba(255,255,255,0.10)";
+      if (!blinking){
+        ctx.strokeStyle = "rgba(255,255,255,0.08)";
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(e.x - e.r*2, e.y);
-        ctx.lineTo(e.x + e.r*2, e.y);
+        ctx.ellipse(e.x, e.y, e.r*2.4, e.r*1.3, 0, 0, Math.PI*2);
         ctx.stroke();
-        continue;
+
+        const dx = clamp((px - e.x)/140, -1, 1);
+        const dy = clamp((py - e.y)/140, -1, 1);
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.beginPath();
+        ctx.arc(e.x + dx*e.r*0.9, e.y + dy*e.r*0.9, Math.max(2, e.r*0.55), 0, Math.PI*2);
+        ctx.fill();
       }
-
-      ctx.strokeStyle = "rgba(255,255,255,0.10)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(e.x, e.y, e.r*2.4, e.r*1.3, 0, 0, Math.PI*2);
-      ctx.stroke();
-
-      const dx = clamp((px - e.x)/140, -1, 1);
-      const dy = clamp((py - e.y)/140, -1, 1);
-      ctx.fillStyle = "rgba(0,0,0,0.55)";
-      ctx.beginPath();
-      ctx.arc(e.x + dx*e.r*0.9, e.y + dy*e.r*0.9, Math.max(2, e.r*0.55), 0, Math.PI*2);
-      ctx.fill();
     }
   }
 
+  // doors (only draw secret if code is found)
+  for (const d of act1Doors()){
+    const canUse = (d.event !== "secretDoor") || hasCode;
+    if (d.event === "secretDoor" && !hasCode) continue;
+    drawDoor(d, canUse);
+  }
+
+  // npc
   if (act1.room === "void"){
     const npc = act1Npc();
     if (npc) drawSmallNpc(npc, "…");
@@ -659,16 +649,15 @@ function drawAct1(){
 
   drawAvatarOrFallback(act1.player, 0);
 
-  glowText(room.name, 60, 84, 0.55, 18);
+  // room title + flavor text (kept clean and out of the way)
+  glowText(room.name, 16, 70, 0.55, 16);
 
-  ctx.font = "600 16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.font = "600 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+  ctx.fillStyle = "rgba(255,255,255,0.48)";
   for (const line of (room.text||[])){
     const yy = (typeof line.y === "function") ? line.y(H) : line.y;
-    ctx.fillText(line.t, 60, yy);
+    ctx.fillText(line.t, 16, yy);
   }
-
-  if (hasCode) glowText("code: larp", 60, 110, 0.35, 14);
 }
 
 /* =========================
@@ -685,7 +674,7 @@ const game = {
   questIndex: 0,
 
   mentorName: "Kurogane",
-  mentorMood: 0, // changes a little when you talk
+  mentorMood: 0,
 
   hub: { npc:{x:240,y:0,w:60,h:120}, board:{x:440,y:0,w:90,h:110}, door:{x:760,y:0,w:90,h:140} },
 
@@ -698,8 +687,6 @@ const game = {
   enterHub(openDialog){
     this.state="hub";
     this.cameraX=0;
-
-    // keep inventory from act 2 runs only (fresh hub start)
     this.inventory=[];
     this.quests=[];
     this.questIndex=0;
@@ -882,15 +869,10 @@ function ultimate(){
   }
 }
 
-/* ===== Tight movement helper (Act 2) ===== */
+/* ===== Tight movement helper (Act 2 hub) ===== */
 function applyTightMovement(pl, dt, groundY){
-  const accel = 2800;
-  const maxSpd = 540;
-  const friction = 5600;
-
-  const jumpVel = -860;
-  const coyoteTime = 0.10;
-  const jumpBuffer = 0.12;
+  const accel = 2800, maxSpd = 540, friction = 5600;
+  const jumpVel = -860, coyoteTime = 0.10, jumpBuffer = 0.12;
 
   let move = 0;
   if(keys.has("a")||keys.has("arrowleft")) move -= 1;
@@ -910,7 +892,6 @@ function applyTightMovement(pl, dt, groundY){
   pl.vx = clamp(pl.vx, -maxSpd, maxSpd);
 
   pl.vy += game.gravity*dt;
-
   pl.x += pl.vx*dt;
   pl.y += pl.vy*dt;
 
@@ -933,24 +914,24 @@ function applyTightMovement(pl, dt, groundY){
   }
 }
 
-/* ===== Mentor menu + options ===== */
+/* ===== Mentor menu ===== */
 function openMentorMenu(){
   const name = game.mentorName;
   ui.openMenu(`${name}: choose`, [
     { label: "Who are you?", action: ()=>{
       game.mentorMood = (game.mentorMood+1)%3;
-      ui.openDialog(`${name}:\n\n“Names are scars. Mine is ${name}.”\n“I'm the one who keeps the gate from chewing visitors.”\n\n(Press Esc)`);
+      ui.openDialog(`${name}:\n\n“Names are scars. Mine is ${name}.”\n“I keep the gate from chewing visitors.”`);
     }},
     { label: "How do I fight?", action: ()=>{
-      ui.openDialog(`${name}:\n\n“Enter is a basic strike.”\n“Q is a dash. E throws a technique.”\n“R is an ultimate, but it demands a full meter.”\n\n“Don’t be brave. Be clean.”`);
+      ui.openDialog(`${name}:\n\n“Enter is a strike.”\n“Q is a dash. E is a technique.”\n“R is an ultimate, if your meter is full.”\n\n“Don’t be brave. Be clean.”`);
     }},
     { label: "Any advice?", action: ()=>{
       const lines = [
-        "“Watch your footing. Pits don’t care about power.”",
+        "“If it feels too quiet, it’s bait.”",
         "“Relics hide where your eyes skip.”",
-        "“If it feels too quiet, it’s bait.”"
+        "“Pits don’t care about power.”"
       ];
-      ui.openDialog(`${name}:\n\n${lines[game.mentorMood]}\n\n(Press Esc)`);
+      ui.openDialog(`${name}:\n\n${lines[game.mentorMood]}`);
     }},
     { label: "Leave", action: ()=> ui.closeAll() }
   ]);
@@ -960,18 +941,12 @@ function hubInteract(){
   const pl=game.player; placeHubObjects();
   const pad={x:pl.x-22,y:pl.y-22,w:pl.w+44,h:pl.h+44};
 
-  if(aabb(pad,game.hub.npc)){
-    openMentorMenu();
-    return;
-  }
+  if(aabb(pad,game.hub.npc)){ openMentorMenu(); return; }
   if(aabb(pad,game.hub.board)){
     ui.openDialog("QUEST BOARD:\n\n1) First Blood (5)\n2) Relic Hunt (3)\n3) Reach the Exit\n\nEnter the gate when ready.");
     return;
   }
-  if(aabb(pad,game.hub.door)){
-    game.startRun();
-    return;
-  }
+  if(aabb(pad,game.hub.door)){ game.startRun(); return; }
 }
 
 function updateHub(dt){
@@ -1000,7 +975,7 @@ function updateDungeon(dt){
   if(pressed.has("enter")) basicAttack();
   if(pressed.has("i")) ui.toggleInventory();
 
-  // tight movement, platforms decide grounding
+  // tight movement (platform grounded)
   const accel = 2800, maxSpd = 540, friction = 5600;
   const jumpVel = -860, coyoteTime = 0.10, jumpBuffer = 0.12;
 
@@ -1037,18 +1012,14 @@ function updateDungeon(dt){
     pl.onGround=false;
   }
 
-  // pits
+  // pits / fall reset
   const groundY=H-160;
   for(const pit of game.pits){
     if(pl.x+pl.w>pit.x && pl.x<pit.x+pit.w){
       if(pl.y+pl.h>=groundY-8 && pl.onGround) pl.onGround=false;
     }
   }
-  if(pl.y>H+900){
-    ui.openDialog("You fell.\n\nRun resets.");
-    game.startRun();
-    return;
-  }
+  if(pl.y>H+900){ ui.openDialog("You fell.\n\nRun resets."); game.startRun(); return; }
 
   // camera
   game.cameraX=clamp(pl.x-W*0.45,0,5200-W+200);
@@ -1072,11 +1043,7 @@ function updateDungeon(dt){
       pl.iFrames=0.55;
       pl.vx+=-Math.sign(dx||1)*520;
       pl.vy=-520;
-      if(pl.hp<=0){
-        ui.openDialog("You blacked out.\n\nRun resets.");
-        game.startRun();
-        return;
-      }
+      if(pl.hp<=0){ ui.openDialog("You blacked out.\n\nRun resets."); game.startRun(); return; }
     }
   }
 
@@ -1144,24 +1111,26 @@ function drawHub(){
   ctx.fillStyle="rgba(255,255,255,0.06)";
   ctx.fillRect(0,groundY,W,260);
 
-  glowText("HUB",34,58,0.9,20);
   placeHubObjects();
 
+  // mentor
   ctx.fillStyle="rgba(255,255,255,0.06)";
   roundRect(game.hub.npc.x,game.hub.npc.y,game.hub.npc.w,game.hub.npc.h,18,true,false);
-  glowText(game.mentorName,game.hub.npc.x-10,game.hub.npc.y-10,0.55,14);
+  drawThinLabel(game.mentorName,game.hub.npc.x,game.hub.npc.y-8);
 
+  // board
   ctx.fillStyle="rgba(255,255,255,0.05)";
   roundRect(game.hub.board.x,game.hub.board.y,game.hub.board.w,game.hub.board.h,16,true,false);
-  glowText("Board",game.hub.board.x,game.hub.board.y-10,0.5,14);
+  drawThinLabel("BOARD",game.hub.board.x,game.hub.board.y-8);
 
+  // gate
   ctx.save();
   ctx.shadowColor="rgba(255,80,80,0.20)";
-  ctx.shadowBlur=26;
+  ctx.shadowBlur=22;
   ctx.fillStyle="rgba(255,80,80,0.06)";
   roundRect(game.hub.door.x,game.hub.door.y,game.hub.door.w,game.hub.door.h,22,true,false);
   ctx.restore();
-  glowText("Dungeon Gate",game.hub.door.x-40,game.hub.door.y-10,0.55,14);
+  drawThinLabel("GATE",game.hub.door.x,game.hub.door.y-8);
 
   drawAvatarOrFallback(game.player,0);
 }
@@ -1189,7 +1158,7 @@ function drawDungeon(){
 
   ctx.fillStyle="rgba(255,255,255,0.06)";
   roundRect(game.exit.x,game.exit.y,game.exit.w,game.exit.h,18,true,false);
-  glowText("EXIT",game.exit.x+14,game.exit.y-10,0.6,16);
+  drawThinLabel("EXIT",game.exit.x+14,game.exit.y-8);
 
   for(const it of game.loot){
     if(it.taken) continue;
@@ -1214,62 +1183,47 @@ function drawDungeon(){
   for(const pr of game.projectiles){
     ctx.save();
     ctx.shadowColor="rgba(120,180,255,0.25)";
-    ctx.shadowBlur=22;
+    ctx.shadowBlur=18;
     ctx.fillStyle="rgba(120,180,255,0.16)";
     roundRect(pr.x,pr.y,pr.w,pr.h,6,true,false);
     ctx.restore();
   }
 
   drawAvatarOrFallback(game.player,cam);
-
   ctx.restore();
 }
 
-function drawHUD(){
+/* ===== Minimal status strip (no giant HUD box) ===== */
+function drawStatus(){
   ctx.save();
+  const pad = 10;
+  const x=12, y=12;
+  const w = Math.min(520, W-24);
+  const h = 52;
+
   ctx.fillStyle="rgba(0,0,0,0.35)";
-  roundRect(12,12,600,140,16,true,false);
+  roundRect(x,y,w,h,14,true,false);
   ctx.strokeStyle="rgba(255,255,255,0.10)";
-  roundRect(12.5,12.5,599,139,16,false,true);
+  roundRect(x+0.5,y+0.5,w-1,h-1,14,false,true);
 
   ctx.fillStyle="rgba(255,255,255,0.80)";
-  ctx.font="700 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-  ctx.fillText(game.state==="act1"?"ACT 1":(game.state==="hub"?"HUB":"DUNGEON RUN"),26,36);
+  ctx.font="700 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 
   if(game.state==="act1"){
+    ctx.fillText(`ACT 1  |  code: ${hasCode ? "larp" : "???"}`, x+pad, y+22);
     ctx.fillStyle="rgba(255,255,255,0.55)";
     ctx.font="600 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(hasCode?"code found: larp":"get the code, then use secret door",26,60);
+    ctx.fillText("Enter = interact", x+pad, y+41);
     ctx.restore();
     return;
   }
 
   const pl=game.player;
-  ctx.fillStyle="rgba(255,255,255,0.35)";
-  ctx.font="600 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-  ctx.fillText("HP",26,56);
-  ctx.fillStyle="rgba(255,80,80,0.55)";
-  ctx.fillRect(56,46,pl.hp*22,10);
-
-  ctx.fillStyle="rgba(255,255,255,0.35)";
-  ctx.fillText("ULT",26,76);
-  ctx.fillStyle="rgba(120,180,255,0.35)";
-  ctx.fillRect(56,66,(pl.ultMeter/100)*220,10);
+  ctx.fillText(game.state==="hub" ? "HUB" : "DUNGEON RUN", x+pad, y+22);
 
   ctx.fillStyle="rgba(255,255,255,0.45)";
-  ctx.fillText("Q dash • E tech • R ult • I inventory",26,98);
-
-  if(game.state==="dungeon"){
-    const q=currentQuest();
-    if(q){
-      const prog=(q.type==="kills"||q.type==="collect")?` (${q.progress}/${q.needed})`:"";
-      ctx.fillStyle="rgba(255,255,255,0.55)";
-      ctx.fillText(`Quest: ${q.title}${prog}`,26,118);
-    }
-  } else {
-    ctx.fillStyle="rgba(255,255,255,0.45)";
-    ctx.fillText("Talk to Kurogane → Board → Gate",26,118);
-  }
+  ctx.font="600 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+  ctx.fillText(`HP ${pl.hp}/${pl.maxHp}  |  ULT ${Math.floor(pl.ultMeter)}%`, x+pad, y+41);
 
   ctx.restore();
 }
@@ -1295,7 +1249,6 @@ function loop(){
       if (pressed.has("enter")) act1Interact();
     } else if (game.state==="hub"){
       updateHub(dt);
-      if (pressed.has("i")) ui.toggleInventory();
     } else {
       updateDungeon(dt);
     }
@@ -1307,7 +1260,7 @@ function loop(){
   else if (game.state==="hub") drawHub();
   else drawDungeon();
 
-  drawHUD();
+  drawStatus();
   ui.draw();
 
   pressed.clear();
@@ -1329,7 +1282,7 @@ function boot(){
   game.questIndex = 0;
 
   ui.openDialog(
-    "Act 1 starts.\n\nThe code-room door is reachable now.\nGet the code (larp) → secret door.\n\nEsc closes panels."
+    "Clean layout update.\n\nDoors don't overlap anymore:\nCODE door = left.\nSECRET door = right.\n\nFind code (larp), then secret door."
   );
 }
 
